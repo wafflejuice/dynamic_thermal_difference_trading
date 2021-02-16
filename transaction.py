@@ -160,6 +160,9 @@ def send_coin_upbit_to_binance_perfect_hedge(upbit, binance, futures, coin_symbo
 		# HIGHLIGHT: 2-2. [Futures] Short
 		Futures.market_short(futures, coin_symbol, coin_count, False)
 		
+		# ---------- wait until buy, short done... TODO: so it is needed to be async
+		time.sleep(5)
+		
 		# HIGHLIGHT: 3. [Upbit->Binance] send
 		decimal_places = 6 # upbit withdraw_decimal_places <= 6
 		upbit_bought_coin_count = Upbit.fetch_coin_count(upbit, coin_symbol)
@@ -188,7 +191,12 @@ def send_coin_binance_to_upbit_prefect_hedge(upbit, binance, futures, coin_symbo
 		# HIGHLIGHT: 2-2. [Futures] Short
 		Futures.market_short(futures, coin_symbol, coin_count, False)
 		
+		# ---------- wait until buy, short done... TODO: so it is needed to be async
+		time.sleep(5)
+		
 		# HIGHLIGHT: 3. [Binance->Upbit] send
+		decimal_places = 6
+		coin_count = round(coin_count, decimal_places)
 		send_binance_to_upbit(upbit, binance, coin_symbol, coin_count)
 		
 		# HIGHLIGHT: 4-1. [Upbit] Sell

@@ -122,4 +122,6 @@ class Futp:
 	def is_acceptable(cls, binance, futures, coin_symbol, gap_ratio):
 		futp = cls.calculate_futp(binance, futures, coin_symbol)
 		
+		print(coin_symbol + ", "+str(futp)+"%")
+		
 		return abs(futp) < gap_ratio

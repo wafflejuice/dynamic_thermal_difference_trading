@@ -8,7 +8,7 @@ class Exchange:
 	KRW_SYMBOL = 'KRW'
 	USDT_SYMBOL = 'USDT'
 	
-	EPOCH_TIME_HOUR_MS = 3600000
+	EPOCH_TIME_TWO_HOUR_MS = 7200000
 
 	@classmethod
 	@abc.abstractmethod

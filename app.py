@@ -43,9 +43,7 @@ def trading_logic_2(upbit, binance, futures):
 			most_reverse_kimp = 0.0
 			
 			for key_coin_symbol in kimp_list_ascending.keys():
-				if (Upbit.is_wallet_limitless(upbit, key_coin_symbol)
-						and Binance.is_wallet_limitless(binance, key_coin_symbol)
-						and Futp.is_acceptable(binance, futures, key_coin_symbol, futp_gap_ratio)):
+				if (Upbit.is_wallet_limitless(upbit, key_coin_symbol) and Binance.is_wallet_limitless(binance, key_coin_symbol) and Futp.is_acceptable(binance, futures, key_coin_symbol, futp_gap_ratio)):
 					most_reverse_kimp_coin_symbol = key_coin_symbol
 					most_reverse_kimp = kimp_list_ascending[key_coin_symbol]
 					
@@ -54,9 +52,7 @@ def trading_logic_2(upbit, binance, futures):
 					break
 			
 			for key_coin_symbol in sorted(kimp_list_ascending.keys(), reverse=True):
-				if (Upbit.is_wallet_limitless(upbit, key_coin_symbol)
-						and Binance.is_wallet_limitless(binance, key_coin_symbol)
-						and Futp.is_acceptable(binance, futures, key_coin_symbol, futp_gap_ratio)):
+				if (Upbit.is_wallet_limitless(upbit, key_coin_symbol) and Binance.is_wallet_limitless(binance, key_coin_symbol) and Futp.is_acceptable(binance, futures, key_coin_symbol, futp_gap_ratio)):
 					most_kimp_coin_symbol = key_coin_symbol
 					most_kimp = kimp_list_ascending[key_coin_symbol]
 

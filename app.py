@@ -189,8 +189,8 @@ def trading_logic_2(upbit, binance, futures):
 	
 	previous_kimp = -0.02 # -2%
 	buffer_margin_ratio = 0.05  # 5%
-	minimum_difference_ratio = 0.019 # 1.5%
-	futp_gap_ratio = 0.007 # 0.7%
+	minimum_difference_ratio = 0.02 # 2%
+	futp_gap_ratio = 0.01 # 0.1%
 	
 	logger.logger.info('start dynamic_tdt2')
 	

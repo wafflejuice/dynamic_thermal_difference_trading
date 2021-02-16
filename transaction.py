@@ -10,7 +10,6 @@ def send_upbit_to_binance(upbit, binance, coin_symbol, amount):
 	logger.logger.info(time.strftime('%c', time.localtime(time.time())) + ' : send upbit to binance start')
 
 	config = Config.load_config()
-	
 	binance_coin_address = config['binance']['address'][coin_symbol] if coin_symbol in config['binance']['address'] else None
 	binance_coin_tag = config['binance']['tag'][coin_symbol] if coin_symbol in config['binance']['tag'] else None
 	
@@ -27,7 +26,7 @@ def send_upbit_to_binance(upbit, binance, coin_symbol, amount):
 	# TODO : Of course, need to make it async
 	while True:
 		# history is chronological sequence
-		upbit_withdraw_history = upbit.fetch_withdrawals(coin_symbol, upbit_server_time - Exchange.EPOCH_TIME_HOUR_MS, None)
+		upbit_withdraw_history = upbit.fetch_withdrawals(coin_symbol, upbit_server_time - Exchange.EPOCH_TIME_TWO_HOUR_MS, None)
 		
 		# if withdraw history is not empty
 		if upbit_withdraw_history:
@@ -45,7 +44,7 @@ def send_upbit_to_binance(upbit, binance, coin_symbol, amount):
 		# history is chronological sequence
 		# Don't know when binance gets submission. So start_time must cover long range.
 		# Assumption: A transaction time is under 1 hour
-		binance_deposit_history = binance.fetch_deposits(coin_symbol, binance_server_time - Exchange.EPOCH_TIME_HOUR_MS, None)
+		binance_deposit_history = binance.fetch_deposits(coin_symbol, binance_server_time - Exchange.EPOCH_TIME_TWO_HOUR_MS, None)
 		
 		# if deposit history is not empty
 		if binance_deposit_history:
@@ -64,7 +63,6 @@ def send_binance_to_upbit(upbit, binance, coin_symbol, amount):
 	logger.logger.info(time.strftime('%c', time.localtime(time.time())) + ' : send binance to upbit start')
 
 	config = Config.load_config()
-	
 	upbit_coin_address = config['upbit']['address'][coin_symbol] if coin_symbol in config['upbit']['address'] else None
 	upbit_coin_tag = config['upbit']['tag'][coin_symbol] if coin_symbol in config['upbit']['tag'] else None
 	
@@ -76,13 +74,13 @@ def send_binance_to_upbit(upbit, binance, coin_symbol, amount):
 	binance_server_time = Binance.fetch_server_time(binance)
 	
 	# response example: {'info': {'success': True, 'id': 'f22641814f3098768efe6e9e7eb253xd'}, 'id': 'f22641814f3098768efe6e9e7eb253xd'}
-	binance_withdraw = upbit.withdraw(coin_symbol, amount, upbit_coin_address, upbit_coin_tag)
+	binance_withdraw = binance.withdraw(coin_symbol, amount, upbit_coin_address, upbit_coin_tag)
 
 	# Get Transaction id by withdraw id
 	# TODO : Of course, need to make it async
 	while True:
 		# history is chronological sequence
-		binance_withdraw_history = binance.fetch_withdrawals(coin_symbol, binance_server_time-Exchange.EPOCH_TIME_HOUR_MS, None)
+		binance_withdraw_history = binance.fetch_withdrawals(coin_symbol, binance_server_time - Exchange.EPOCH_TIME_TWO_HOUR_MS, None)
 		
 		# if withdraw history is not empty
 		if binance_withdraw_history:
@@ -100,7 +98,7 @@ def send_binance_to_upbit(upbit, binance, coin_symbol, amount):
 		# history is chronological sequence
 		# Don't know when upbit gets submission. So start_time must cover long range.
 		# Assumption: A transaction time is under 1 hour
-		upbit_deposit_history = upbit.fetch_deposits(coin_symbol, upbit_server_time-Exchange.EPOCH_TIME_HOUR_MS, None)
+		upbit_deposit_history = upbit.fetch_deposits(coin_symbol, upbit_server_time - Exchange.EPOCH_TIME_TWO_HOUR_MS, None)
 		
 		# if deposit history is not empty
 		if upbit_deposit_history:
@@ -129,7 +127,7 @@ def internal_transfer_usdt(binance, amount_usdt, direction_type):
 	# TODO : Of course, need to make it async
 	while True:
 		futures_transaction_history = binance.sapi_get_futures_transfer({
-			'startTime': start_time - Exchange.EPOCH_TIME_HOUR_MS,  # Because timestamp is floor(serverTime) by second, subtract 1 hour
+			'startTime': start_time - Exchange.EPOCH_TIME_TWO_HOUR_MS,  # Because timestamp is floor(serverTime) by second, subtract 1 hour
 			'current': 1,
 			'asset': Exchange.USDT_SYMBOL,
 		})

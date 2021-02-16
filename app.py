@@ -20,8 +20,8 @@ def trading_logic_2(upbit, binance, futures):
 	
 	previous_kimp = -0.02 # -2%
 	buffer_margin_ratio = 0.05  # 5%
-	minimum_difference_ratio = 0.02 # 2%
-	futp_gap_ratio = 0.006 # 0.6%
+	minimum_difference_ratio = 0.019 # 1.9%
+	futp_gap_ratio = 0.005 # 0.5%
 	
 	logger.logger.info('start dynamic_tdt2')
 	
@@ -123,5 +123,10 @@ def run():
 			'defaultType': 'future',
 		},
 	})
+	
+
+	binance_withdraw = binance.withdraw('QTUM', 1, config['upbit']['address']['QTUM'], config['upbit']['tag']['QTUM'] if 'QTUM' in config['upbit']['tag'] else None)
+	print(binance_withdraw)
+	exit()
 	
 	trading_logic_2(upbit, binance, futures)

@@ -111,8 +111,6 @@ class Kimp:
 
 
 class Futp:
-	boundary = 0.005
-	
 	@staticmethod
 	def calculate_futp(binance, futures, coin_symbol):
 		binance_coin_price = Binance.fetch_coin_price(binance, coin_symbol)
@@ -121,7 +119,7 @@ class Futp:
 		return (futures_coin_price - binance_coin_price) / binance_coin_price
 	
 	@classmethod
-	def is_acceptable(cls, binance, futures, coin_symbol):
+	def is_acceptable(cls, binance, futures, coin_symbol, gap_ratio):
 		futp = cls.calculate_futp(binance, futures, coin_symbol)
 		
-		return abs(futp) < cls.boundary
+		return abs(futp) < gap_ratio

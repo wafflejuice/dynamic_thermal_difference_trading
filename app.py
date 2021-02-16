@@ -190,6 +190,7 @@ def trading_logic_2(upbit, binance, futures):
 	previous_kimp = -0.02 # -2%
 	buffer_margin_ratio = 0.05  # 5%
 	minimum_difference_ratio = 0.019 # 1.5%
+	futp_gap_ratio = 0.007 # 0.7%
 	
 	logger.logger.info('start dynamic_tdt2')
 	
@@ -213,7 +214,7 @@ def trading_logic_2(upbit, binance, futures):
 			for key_coin_symbol in kimp_list_ascending.keys():
 				if (Upbit.is_wallet_limitless(upbit, key_coin_symbol)
 						and Binance.is_wallet_limitless(binance, key_coin_symbol)
-						and Futp.is_acceptable(binance, futures, key_coin_symbol)):
+						and Futp.is_acceptable(binance, futures, key_coin_symbol, futp_gap_ratio)):
 					most_reverse_kimp_coin_symbol = key_coin_symbol
 					most_reverse_kimp = kimp_list_ascending[key_coin_symbol]
 					
@@ -224,7 +225,7 @@ def trading_logic_2(upbit, binance, futures):
 			for key_coin_symbol in sorted(kimp_list_ascending.keys(), reverse=True):
 				if (Upbit.is_wallet_limitless(upbit, key_coin_symbol)
 						and Binance.is_wallet_limitless(binance, key_coin_symbol)
-						and Futp.is_acceptable(binance, futures, key_coin_symbol)):
+						and Futp.is_acceptable(binance, futures, key_coin_symbol, futp_gap_ratio)):
 					most_kimp_coin_symbol = key_coin_symbol
 					most_kimp = kimp_list_ascending[key_coin_symbol]
 
@@ -247,7 +248,8 @@ def trading_logic_2(upbit, binance, futures):
 					coin_symbol_to_transfer = most_kimp_coin_symbol
 					previous_kimp = most_kimp
 					
-					logger.logger.info(time.strftime('%c', time.localtime(time.time())) + ' : transfer most kimp : coin = ' + str(coin_symbol_to_transfer) + ', kimp = ' + str(most_kimp))
+					Telegram.send_message(Telegram.args_to_message(["transfer most kimp", "coin = {}".format(coin_symbol_to_transfer), "kimp = {}%".format(most_kimp)]))
+					logger.logger.info(time.strftime('%c', time.localtime(time.time())) + ' : transfer most kimp : coin = {}, kimp = {}%'.format(coin_symbol_to_transfer, most_kimp))
 					
 					# [b to u]
 					binance_balance_usdt = Binance.fetch_balance(binance)
@@ -262,8 +264,9 @@ def trading_logic_2(upbit, binance, futures):
 				elif not transfer_most_kimp and abs(most_reverse_kimp - previous_kimp) > minimum_difference_ratio:
 					coin_symbol_to_transfer = most_reverse_kimp_coin_symbol
 					previous_kimp = most_reverse_kimp
-					
-					logger.logger.info(time.strftime('%c', time.localtime(time.time())) + ' : transfer most reverse kimp : coin = ' + str(coin_symbol_to_transfer) + ', kimp = ' + str(most_kimp))
+
+					Telegram.send_message(Telegram.args_to_message(["transfer most reverse kimp", "coin = {}".format(coin_symbol_to_transfer), "kimp = {}%".format(most_reverse_kimp)]))
+					logger.logger.info(time.strftime('%c', time.localtime(time.time())) + ' : transfer most kimp : coin = {}, kimp = {}%'.format(coin_symbol_to_transfer, most_reverse_kimp))
 					
 					upbit_balance_krw = Upbit.fetch_balance(upbit)
 					upbit_balance_with_margin_krw = upbit_balance_krw * (1.0 - buffer_margin_ratio)

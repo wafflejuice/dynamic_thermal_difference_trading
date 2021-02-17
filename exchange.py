@@ -1,6 +1,8 @@
 import abc
+import asyncio
 
 from telegram import Telegram
+
 
 class Exchange:
 	__metaclass__ = abc.ABCMeta
@@ -31,10 +33,10 @@ class Exchange:
 		pass
 
 	@staticmethod
-	def telegram_me_balance(upbit, binance, futures):
-		upbit_balance = 'upbit balance='+str(Upbit.fetch_balance(upbit)) + 'KRW'
-		binance_balance = 'binance balance='+str(Binance.fetch_balance(binance)) + 'USDT'
-		futures_balance = 'futures balance='+str(Futures.fetch_balance(futures)) + 'USDT'
+	async def telegram_me_balance(upbit, binance, futures):
+		upbit_balance = 'upbit balance='+str(await Upbit.fetch_balance(upbit)) + 'KRW'
+		binance_balance = 'binance balance='+str(await Binance.fetch_balance(binance)) + 'USDT'
+		futures_balance = 'futures balance='+str(await Futures.fetch_balance(futures)) + 'USDT'
 		
 		args = [upbit_balance, binance_balance, futures_balance]
 		Telegram.send_message(Telegram.args_to_message(args))
@@ -99,8 +101,10 @@ class Upbit(Exchange):
 		return coin_symbol + '/' + cls.KRW_SYMBOL
 	
 	@staticmethod
-	def fetch_server_time(upbit):
-		ticker = upbit.public_get_ticker({
+	async def fetch_server_time(upbit):
+		loop = asyncio.get_event_loop()
+		
+		ticker = await loop.run_in_executor(None, upbit.public_get_ticker, {
 			'markets': 'KRW-XRP' # The market kind has no effect. Only used for fetching server time.
 		})
 		server_time = int(ticker[0]['timestamp'])
@@ -173,12 +177,12 @@ class Binance(Exchange):
 		return coin_symbol + '/' + cls.USDT_SYMBOL
 	
 	@staticmethod
-	def fetch_server_time(binance):
-		return binance.fetch_time()
+	async def fetch_server_time(binance):
+		return await binance.fetch_time()
 	
 	@staticmethod
-	def fetch_market_symbols(binance):
-		binance_markets = binance.fetch_markets()
+	async def fetch_market_symbols(binance):
+		binance_markets = await binance.fetch_markets()
 		binance_symbols = []
 		
 		for market in binance_markets:
@@ -188,34 +192,33 @@ class Binance(Exchange):
 		return binance_symbols
 	
 	@classmethod
-	def fetch_balance(cls, binance):
-		return binance.fetch_balance()[cls.USDT_SYMBOL]['free']
+	async def fetch_balance(cls, binance):
+		return await binance.fetch_balance()[cls.USDT_SYMBOL]['free']
 	
 	@staticmethod
-	def fetch_coin_count(binance, coin_symbol):
-		return binance.fetch_balance()[coin_symbol]['free']
+	async def fetch_coin_count(binance, coin_symbol):
+		return await binance.fetch_balance()[coin_symbol]['free']
 
 	@classmethod
-	def fetch_coin_price(cls, binance, coin_symbol):
-		return binance.fetch_ticker(cls.get_coin_id(coin_symbol))['last']
+	async def fetch_coin_price(cls, binance, coin_symbol):
+		return await binance.fetch_ticker(cls.get_coin_id(coin_symbol))['last']
 	
 	@classmethod
-	def fetch_market_restricts(cls, binance, coin_symbol):
-		binance.load_markets()
-		market = binance.markets[cls.get_coin_id(coin_symbol)]
+	async def fetch_market_restricts(cls, binance, coin_symbol):
+		await binance.load_markets()
 		
-		return market
+		return await binance.markets[cls.get_coin_id(coin_symbol)]
 	
 	@classmethod
-	def fetch_coin_price_precision(cls, binance, coin_symbol):
-		restricts = cls.fetch_market_restricts(binance, coin_symbol)
+	async def fetch_coin_price_precision(cls, binance, coin_symbol):
+		restricts = await cls.fetch_market_restricts(binance, coin_symbol)
 		price_precision = restricts['precision']['price']
 		
 		return price_precision
 	
 	@classmethod
-	def fetch_coin_amount_precision(cls, binance, coin_symbol):
-		restricts = cls.fetch_market_restricts(binance, coin_symbol)
+	async def fetch_coin_amount_precision(cls, binance, coin_symbol):
+		restricts = await cls.fetch_market_restricts(binance, coin_symbol)
 		quantity_precision = restricts['precision']['amount']
 		
 		return quantity_precision
@@ -245,12 +248,12 @@ class Futures(Exchange):
 		return coin_symbol + cls.USDT_SYMBOL
 		
 	@staticmethod
-	def fetch_server_time(futures):
-		return futures.fetch_time()
+	async def fetch_server_time(futures):
+		return await futures.fetch_time()
 	
 	@staticmethod
-	def fetch_market_symbols(futures):
-		futures_markets = futures.fetch_markets()
+	async def fetch_market_symbols(futures):
+		futures_markets = await futures.fetch_markets()
 		futures_symbols = []
 		
 		for market in futures_markets:
@@ -260,8 +263,8 @@ class Futures(Exchange):
 		return futures_symbols
 	
 	@classmethod
-	def fetch_balance(cls, futures):
-		return futures.fetch_balance()['USDT']['free']
+	async def fetch_balance(cls, futures):
+		return await futures.fetch_balance()['USDT']['free']
 	
 	# + : Long, - : Short
 	@classmethod

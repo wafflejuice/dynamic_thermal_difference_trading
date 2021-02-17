@@ -125,8 +125,18 @@ def run():
 	})
 	
 
-	binance_withdraw = binance.withdraw('QTUM', 1, config['upbit']['address']['QTUM'], config['upbit']['tag']['QTUM'] if 'QTUM' in config['upbit']['tag'] else None)
-	print(binance_withdraw)
+	async def get_time():
+		loop = asyncio.get_event_loop()
+		upbit_server_time = await loop.run_in_executor(None, Upbit.fetch_server_time, upbit)
+		binance_server_time = await loop.run_in_executor(None, Binance.fetch_server_time, binance)
+		
+		print(upbit_server_time)
+		print(binance_server_time)
+
+	import asyncio
+	loop = asyncio.get_event_loop()
+	loop.run_until_complete(get_time())
+	loop.close()
 	exit()
 	
 	trading_logic_2(upbit, binance, futures)

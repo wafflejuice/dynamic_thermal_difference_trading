@@ -174,6 +174,10 @@ class Upbit(Exchange):
 		return upbit.fetch_currency_by_id(coin_symbol)['active']
 	
 	@classmethod
+	def fetch_coin_withdraw_fee(cls, upbit, coin_symbol):
+		return upbit.fetch_currency_by_id(coin_symbol)['info']['currency']['withdraw_fee']
+	
+	@classmethod
 	def create_market_buy_order(cls, upbit, coin_symbol, coin_count):
 		coin_price = cls.fetch_coin_price(upbit, coin_symbol)
 		
@@ -187,6 +191,7 @@ class Upbit(Exchange):
 
 class Binance(Exchange):
 	TAKER_FEE = 0.001
+	
 	
 	@classmethod
 	def get_coin_id(cls, coin_symbol):
@@ -249,6 +254,10 @@ class Binance(Exchange):
 				return config['depositAllEnable'] and config['withdrawAllEnable'] and config['trading']
 		
 		return None
+	
+	@classmethod
+	def fetch_coin_withdraw_fee(cls, binance, coin_symbol):
+		return binance.fetch_funding_fees()['withdraw'][coin_symbol]
 	
 	@classmethod
 	def create_market_buy_order(cls, binance, coin_symbol, coin_count):

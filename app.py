@@ -18,7 +18,7 @@ def trading_logic_2(upbit, binance, futures):
 		#Futures.adjust_leverage(futures, coin_symbol, 5)
 		min_coin_amount_precisions[coin_symbol] = Exchange.fetch_min_coin_amount_precision(upbit, binance, futures, coin_symbol)
 	
-	previous_kimp = -0.02 # -2%
+	previous_kimp = 0.0 # 0%
 	buffer_margin_ratio = 0.05  # 5%
 	minimum_difference_ratio = 0.02 # 2%
 	futp_gap_ratio = 0.005 # 0.5%
@@ -125,5 +125,5 @@ def run():
 			'defaultType': 'future',
 		},
 	})
-	
+
 	trading_logic_2(upbit, binance, futures)

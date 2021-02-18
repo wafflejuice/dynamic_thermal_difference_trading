@@ -21,6 +21,7 @@ def send_upbit_to_binance(upbit, binance, coin_symbol, amount):
 	binance_server_time = Binance.fetch_server_time(binance)
 	
 	upbit_withdraw = upbit.withdraw(coin_symbol, amount, binance_coin_address, binance_coin_tag)
+	logger.logger.info('upbit withdraw response : {}'.format(upbit_withdraw))
 	
 	# Get Transaction id by withdraw id
 	while True:
@@ -73,6 +74,7 @@ def send_binance_to_upbit(upbit, binance, coin_symbol, amount):
 	
 	# response example: {'info': {'success': True, 'id': 'f22641814f3098768efe6e9e7eb253xd'}, 'id': 'f22641814f3098768efe6e9e7eb253xd'}
 	binance_withdraw = binance.withdraw(coin_symbol, amount, upbit_coin_address, upbit_coin_tag)
+	logger.logger.info('binance withdraw response : {}'.format(binance_withdraw))
 
 	# Get Transaction id by withdraw id
 	while True:
@@ -150,18 +152,26 @@ def send_coin_upbit_to_binance_perfect_hedge(upbit, binance, futures, coin_symbo
 		logger.logger.info(time.strftime('%c', time.localtime(time.time())) + ' : send upbit to binance perfect hedge start')
 		
 		# HIGHLIGHT: 2-1. [Upbit] Buy
-		Upbit.create_market_buy_order(upbit, coin_symbol, coin_count)
+		response = Upbit.create_market_buy_order(upbit, coin_symbol, coin_count)
+		logger.logger.info('upbit response to coin buy order : {}'.format(response))
+
+		logger.logger.info('upbit coin buy order : {}'.format(coin_count))
 		
 		# HIGHLIGHT: 2-2. [Futures] Short
 		Futures.market_short(futures, coin_symbol, coin_count, False)
+		
+		logger.logger.info('binance coin fetch : {}'.format(Upbit.fetch_coin_count(upbit, coin_symbol)))
 
 		time.sleep(5)
 		
 		# HIGHLIGHT: 3. [Upbit->Binance] send
 		send_upbit_to_binance(upbit, binance, coin_symbol, coin_count)
+
+		# upbit withdraw fee
+		sended_coin_count = coin_count - Upbit.fetch_coin_withdraw_fee(upbit, coin_symbol)
 		
 		# HIGHLIGHT: 4-1. [Binance] Sell
-		Binance.create_market_sell_order(binance, coin_symbol, coin_count)
+		Binance.create_market_sell_order(binance, coin_symbol, sended_coin_count)
 		
 		# HIGHLIGHT: 4-2. [Futures] Long (reduce-only)
 		Futures.market_long(futures, coin_symbol, coin_count, True)
@@ -185,6 +195,7 @@ def send_coin_binance_to_upbit_prefect_hedge(upbit, binance, futures, coin_symbo
 
 		logger.logger.info('binance coin buy order : {}'.format(coin_count))
 		
+		# binance taker fee
 		bought_coin_count = coin_count * (1.0 - Binance.TAKER_FEE)
 		coin_count = Exchange.safe_coin_amount(upbit, binance, futures, coin_symbol, bought_coin_count)
 		
@@ -199,8 +210,11 @@ def send_coin_binance_to_upbit_prefect_hedge(upbit, binance, futures, coin_symbo
 		# HIGHLIGHT: 3. [Binance->Upbit] send
 		send_binance_to_upbit(upbit, binance, coin_symbol, coin_count)
 		
+		# binance withdraw fee
+		sended_coin_count = coin_count - Binance.fetch_coin_withdraw_fee(binance, coin_symbol)
+		
 		# HIGHLIGHT: 4-1. [Upbit] Sell
-		Upbit.create_market_sell_order(upbit, coin_symbol, coin_count)
+		Upbit.create_market_sell_order(upbit, coin_symbol, sended_coin_count)
 		
 		# HIGHLIGHT: 4-2. [Futures] Long (reduce-only)
 		Futures.market_long(futures, coin_symbol, coin_count, True)

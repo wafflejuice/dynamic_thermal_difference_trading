@@ -1,5 +1,4 @@
 import time
-import math
 
 from exchange import Exchange, Upbit, Binance, Futures
 from telegram import Telegram
@@ -190,7 +189,7 @@ def send_coin_binance_to_upbit_prefect_hedge(upbit, binance, futures, coin_symbo
 		coin_count = Exchange.safe_coin_amount(upbit, binance, futures, coin_symbol, bought_coin_count)
 		
 		logger.logger.info('binance coin estimate : {}'.format(coin_count))
-		logger.logger.info('binance coin fetch : {}'.format(Binance.fetch_coin_count(coin_symbol)))
+		logger.logger.info('binance coin fetch : {}'.format(Binance.fetch_coin_count(binance, coin_symbol)))
 		
 		# HIGHLIGHT: 2-2. [Futures] Short
 		Futures.market_short(futures, coin_symbol, coin_count, False)

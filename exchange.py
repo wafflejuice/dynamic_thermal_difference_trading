@@ -47,37 +47,38 @@ class Exchange:
 		binance_market_symbols = Binance.fetch_market_symbols(binance)
 		futures_market_symbols = Futures.fetch_market_symbols(futures)
 		
-		market_symbols_intersection =  list(set(upbit_market_symbols) & set(binance_market_symbols) & set(futures_market_symbols))
+		market_symbols_intersection =  set(upbit_market_symbols) & set(binance_market_symbols) & set(futures_market_symbols)
 		
 		# upbit doesn't update wallet states properly. So I need to manually get rid of them.
-		market_symbols_intersection.remove('IOTA') # Upbit
-		market_symbols_intersection.remove('ATOM') # Upbit
+		market_symbols_intersection.discard('IOTA') # Upbit
+		market_symbols_intersection.discard('ATOM') # Upbit
+		market_symbols_intersection.discard('LOOM') # Upbit
 		
 		# upbit withdraw fee expensive (> 1,500KRW)
-		market_symbols_intersection.remove('ANKR')
-		market_symbols_intersection.remove('BAT')
-		market_symbols_intersection.remove('BTC')
-		market_symbols_intersection.remove('CHZ')
-		market_symbols_intersection.remove('CVC')
-		market_symbols_intersection.remove('DOT')
-		market_symbols_intersection.remove('ENJ')
-		market_symbols_intersection.remove('ETH')
-		market_symbols_intersection.remove('KAVA')
-		market_symbols_intersection.remove('KNC')
-		market_symbols_intersection.remove('LINK')
-		market_symbols_intersection.remove('LTC')
-		market_symbols_intersection.remove('OMG')
-		market_symbols_intersection.remove('SAND')
-		market_symbols_intersection.remove('SRM')
-		market_symbols_intersection.remove('STORJ')
-		market_symbols_intersection.remove('SXP')
-		market_symbols_intersection.remove('VET')
-		market_symbols_intersection.remove('XTZ')
-		market_symbols_intersection.remove('ZRX')
+		market_symbols_intersection.discard('ANKR')
+		market_symbols_intersection.discard('BAT')
+		market_symbols_intersection.discard('BTC')
+		market_symbols_intersection.discard('CHZ')
+		market_symbols_intersection.discard('CVC')
+		market_symbols_intersection.discard('DOT')
+		market_symbols_intersection.discard('ENJ')
+		market_symbols_intersection.discard('ETH')
+		market_symbols_intersection.discard('KAVA')
+		market_symbols_intersection.discard('KNC')
+		market_symbols_intersection.discard('LINK')
+		market_symbols_intersection.discard('LTC')
+		market_symbols_intersection.discard('OMG')
+		market_symbols_intersection.discard('SAND')
+		market_symbols_intersection.discard('SRM')
+		market_symbols_intersection.discard('STORJ')
+		market_symbols_intersection.discard('SXP')
+		market_symbols_intersection.discard('VET')
+		market_symbols_intersection.discard('XTZ')
+		market_symbols_intersection.discard('ZRX')
 
 		# binance withdraw fee expensive (> 1,500KRW)
 		
-		return sorted(market_symbols_intersection)
+		return sorted(list(market_symbols_intersection))
 	
 	@staticmethod
 	def fetch_min_coin_price_precision(upbit, binance, futures, coin_symbol):

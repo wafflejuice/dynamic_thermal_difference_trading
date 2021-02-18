@@ -163,25 +163,11 @@ class Upbit(Exchange):
 		return price_precision
 	
 	@classmethod
-	def safe_coin_price(cls, upbit, coin_symbol, coin_price):
-		price_precision = cls.fetch_coin_price_precision(upbit, coin_symbol)
-		floor_factor = math.pow(10.0, price_precision)
-		
-		return math.floor(coin_price * floor_factor) / floor_factor
-	
-	@classmethod
 	def fetch_coin_amount_precision(cls, upbit, coin_symbol):
 		restricts = cls.fetch_market_restricts(upbit, coin_symbol)
 		quantity_precision = restricts['precision']['amount']
 		
 		return quantity_precision
-	
-	@classmethod
-	def safe_coin_amount(cls, upbit, coin_symbol, coin_amount):
-		amount_precision = cls.fetch_coin_amount_precision(upbit, coin_symbol)
-		floor_factor = math.pow(10.0, amount_precision)
-		
-		return math.floor(coin_amount * floor_factor) / floor_factor
 	
 	@classmethod
 	def is_wallet_limitless(cls, upbit, coin_symbol):
@@ -205,13 +191,6 @@ class Binance(Exchange):
 	@classmethod
 	def get_coin_id(cls, coin_symbol):
 		return coin_symbol + '/' + cls.USDT_SYMBOL
-	
-	@classmethod
-	def safe_precision(cls, amount):
-		min_precision = min(cls.BUY_PRECISION, cls.SELL_PRECISION, cls.WITHDRAW_PRECISION)
-		floor_factor = math.pow(10.0, min_precision)
-		
-		return math.floor(amount * floor_factor) / floor_factor
 	
 	@staticmethod
 	def fetch_server_time(binance):
@@ -255,25 +234,11 @@ class Binance(Exchange):
 		return price_precision
 	
 	@classmethod
-	def safe_coin_price(cls, binance, coin_symbol, coin_price):
-		price_precision = cls.fetch_coin_price_precision(binance, coin_symbol)
-		floor_factor = math.pow(10.0, price_precision)
-		
-		return math.floor(coin_price * floor_factor) / floor_factor
-	
-	@classmethod
 	def fetch_coin_amount_precision(cls, binance, coin_symbol):
 		restricts = cls.fetch_market_restricts(binance, coin_symbol)
 		quantity_precision = restricts['precision']['amount']
 		
 		return quantity_precision
-	
-	@classmethod
-	def safe_coin_amount(cls, binance, coin_symbol, coin_amount):
-		amount_precision = cls.fetch_coin_amount_precision(binance, coin_symbol)
-		floor_factor = math.pow(10.0, amount_precision)
-		
-		return math.floor(coin_amount * floor_factor) / floor_factor
 	
 	@classmethod
 	def is_wallet_limitless(cls, binance, coin_symbol):

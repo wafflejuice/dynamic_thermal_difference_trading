@@ -126,9 +126,4 @@ def run():
 		},
 	})
 	
-	binance.load_markets()
-	market = binance.markets['XRP/USDT']
-	print(market)
-	exit()
-	
 	trading_logic_2(upbit, binance, futures)

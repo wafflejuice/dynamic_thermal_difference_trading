@@ -20,7 +20,7 @@ def trading_logic_2(upbit, binance, futures):
 	
 	previous_kimp = -0.02 # -2%
 	buffer_margin_ratio = 0.05  # 5%
-	minimum_difference_ratio = 0.019 # 1.9%
+	minimum_difference_ratio = 0.02 # 2%
 	futp_gap_ratio = 0.005 # 0.5%
 	
 	logger.logger.info('start dynamic_tdt2')
@@ -83,10 +83,10 @@ def trading_logic_2(upbit, binance, futures):
 					binance_balance_with_margin_usdt = binance_balance_usdt * (1.0 - buffer_margin_ratio)
 					binance_coin_price_usdt = Binance.fetch_coin_price(binance, coin_symbol_to_transfer)
 					
-					coin_amount_precision = min_coin_amount_precisions[coin_symbol_to_transfer]
-					coin_count_to_transfer = round(binance_balance_with_margin_usdt / binance_coin_price_usdt, coin_amount_precision)
+					coin_amount_to_transfer = binance_balance_with_margin_usdt / binance_coin_price_usdt
+					safe_coin_amount_to_transfer = Exchange.safe_coin_amount(upbit, binance, futures, coin_symbol_to_transfer, coin_amount_to_transfer)
 					
-					transaction.send_coin_binance_to_upbit_prefect_hedge(upbit, binance, futures, coin_symbol_to_transfer, coin_count_to_transfer)
+					transaction.send_coin_binance_to_upbit_prefect_hedge(upbit, binance, futures, coin_symbol_to_transfer, safe_coin_amount_to_transfer)
 				
 				elif not transfer_most_kimp and abs(most_reverse_kimp - previous_kimp) > minimum_difference_ratio:
 					coin_symbol_to_transfer = most_reverse_kimp_coin_symbol
@@ -99,16 +99,18 @@ def trading_logic_2(upbit, binance, futures):
 					upbit_balance_with_margin_krw = upbit_balance_krw * (1.0 - buffer_margin_ratio)
 					upbit_coin_price_krw = Upbit.fetch_coin_price(upbit, coin_symbol_to_transfer)
 					
-					coin_amount_precision = min_coin_amount_precisions[coin_symbol_to_transfer]
-					coin_count_to_transfer = round(upbit_balance_with_margin_krw / upbit_coin_price_krw, coin_amount_precision)
+					coin_amount_to_transfer = upbit_balance_with_margin_krw / upbit_coin_price_krw
+					safe_coin_amount_to_transfer = Exchange.safe_coin_amount(upbit, binance, futures, coin_symbol_to_transfer, coin_amount_to_transfer)
 					
-					transaction.send_coin_upbit_to_binance_perfect_hedge(upbit, binance, futures, coin_symbol_to_transfer, coin_count_to_transfer)
+					transaction.send_coin_upbit_to_binance_perfect_hedge(upbit, binance, futures, coin_symbol_to_transfer, safe_coin_amount_to_transfer)
 				
 			time.sleep(10)
 		
 		except Exception as e:
 			Telegram.send_message(e)
 			logger.logger.error(e)
+			
+			return
 			
 def run():
 	config = Config.load_config()
@@ -124,9 +126,9 @@ def run():
 		},
 	})
 	
-
-	binance_withdraw = binance.withdraw('QTUM', 1, config['upbit']['address']['QTUM'], config['upbit']['tag']['QTUM'] if 'QTUM' in config['upbit']['tag'] else None)
-	print(binance_withdraw)
+	binance.load_markets()
+	market = binance.markets['XRP/USDT']
+	print(market)
 	exit()
 	
 	trading_logic_2(upbit, binance, futures)

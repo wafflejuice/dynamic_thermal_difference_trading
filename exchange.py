@@ -1,6 +1,8 @@
 import abc
+import math
 
 from telegram import Telegram
+
 
 class Exchange:
 	__metaclass__ = abc.ABCMeta
@@ -49,6 +51,7 @@ class Exchange:
 		
 		# upbit doesn't update wallet states properly. So I need to manually get rid of them.
 		market_symbols_intersection.remove('IOTA') # Upbit
+		market_symbols_intersection.remove('ATOM') # Upbit
 		
 		# upbit withdraw fee expensive (> 1,500KRW)
 		market_symbols_intersection.remove('ANKR')
@@ -84,6 +87,13 @@ class Exchange:
 		
 		return min(upbit_price_precision, binance_price_precision, futures_price_precision)
 	
+	@classmethod
+	def safe_coin_price(cls, upbit, binance, futures, coin_symbol, coin_price):
+		min_price_precision = cls.fetch_min_coin_price_precision(upbit, binance, futures, coin_symbol)
+		floor_factor = math.pow(10.0, min_price_precision)
+		
+		return math.floor(coin_price * floor_factor) / floor_factor
+	
 	@staticmethod
 	def fetch_min_coin_amount_precision(upbit, binance, futures, coin_symbol):
 		upbit_amount_precision = Upbit.fetch_coin_amount_precision(upbit, coin_symbol)
@@ -91,6 +101,14 @@ class Exchange:
 		futures_amount_precision = Futures.fetch_coin_amount_precision(futures, coin_symbol)
 		
 		return min(upbit_amount_precision, binance_amount_precision, futures_amount_precision)
+	
+	@classmethod
+	def safe_coin_amount(cls, upbit, binance, futures, coin_symbol, coin_amount):
+		min_amount_precision = cls.fetch_min_coin_amount_precision(upbit, binance, futures, coin_symbol)
+		min_amount_precision = min(min_amount_precision, 6) # 6 for upbit withdraw precision
+		floor_factor = math.pow(10.0, min_amount_precision)
+		
+		return math.floor(coin_amount * floor_factor) / floor_factor
 
 
 class Upbit(Exchange):
@@ -145,11 +163,25 @@ class Upbit(Exchange):
 		return price_precision
 	
 	@classmethod
+	def safe_coin_price(cls, upbit, coin_symbol, coin_price):
+		price_precision = cls.fetch_coin_price_precision(upbit, coin_symbol)
+		floor_factor = math.pow(10.0, price_precision)
+		
+		return math.floor(coin_price * floor_factor) / floor_factor
+	
+	@classmethod
 	def fetch_coin_amount_precision(cls, upbit, coin_symbol):
 		restricts = cls.fetch_market_restricts(upbit, coin_symbol)
 		quantity_precision = restricts['precision']['amount']
 		
 		return quantity_precision
+	
+	@classmethod
+	def safe_coin_amount(cls, upbit, coin_symbol, coin_amount):
+		amount_precision = cls.fetch_coin_amount_precision(upbit, coin_symbol)
+		floor_factor = math.pow(10.0, amount_precision)
+		
+		return math.floor(coin_amount * floor_factor) / floor_factor
 	
 	@classmethod
 	def is_wallet_limitless(cls, upbit, coin_symbol):
@@ -168,9 +200,18 @@ class Upbit(Exchange):
 
 
 class Binance(Exchange):
+	TAKER_FEE = 0.001
+	
 	@classmethod
 	def get_coin_id(cls, coin_symbol):
 		return coin_symbol + '/' + cls.USDT_SYMBOL
+	
+	@classmethod
+	def safe_precision(cls, amount):
+		min_precision = min(cls.BUY_PRECISION, cls.SELL_PRECISION, cls.WITHDRAW_PRECISION)
+		floor_factor = math.pow(10.0, min_precision)
+		
+		return math.floor(amount * floor_factor) / floor_factor
 	
 	@staticmethod
 	def fetch_server_time(binance):
@@ -214,11 +255,25 @@ class Binance(Exchange):
 		return price_precision
 	
 	@classmethod
+	def safe_coin_price(cls, binance, coin_symbol, coin_price):
+		price_precision = cls.fetch_coin_price_precision(binance, coin_symbol)
+		floor_factor = math.pow(10.0, price_precision)
+		
+		return math.floor(coin_price * floor_factor) / floor_factor
+	
+	@classmethod
 	def fetch_coin_amount_precision(cls, binance, coin_symbol):
 		restricts = cls.fetch_market_restricts(binance, coin_symbol)
 		quantity_precision = restricts['precision']['amount']
 		
 		return quantity_precision
+	
+	@classmethod
+	def safe_coin_amount(cls, binance, coin_symbol, coin_amount):
+		amount_precision = cls.fetch_coin_amount_precision(binance, coin_symbol)
+		floor_factor = math.pow(10.0, amount_precision)
+		
+		return math.floor(coin_amount * floor_factor) / floor_factor
 	
 	@classmethod
 	def is_wallet_limitless(cls, binance, coin_symbol):
@@ -232,14 +287,16 @@ class Binance(Exchange):
 	
 	@classmethod
 	def create_market_buy_order(cls, binance, coin_symbol, coin_count):
-		binance.create_market_buy_order(Binance.get_coin_id(coin_symbol), coin_count)  # , {'test':True,})
+		binance.create_market_buy_order(cls.get_coin_id(coin_symbol), coin_count)  # , {'test':True,})
 		
 	@classmethod
 	def create_market_sell_order(cls, binance, coin_symbol, coin_count):
-		binance.create_market_sell_order(Binance.get_coin_id(coin_symbol), coin_count)  # , {'test':True,})
+		binance.create_market_sell_order(cls.get_coin_id(coin_symbol), coin_count)  # , {'test':True,})
 
 
 class Futures(Exchange):
+	TAKER_FEE = 0.0004
+	
 	@classmethod
 	def get_coin_id(cls, coin_symbol):
 		return coin_symbol + cls.USDT_SYMBOL

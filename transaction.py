@@ -1,4 +1,5 @@
 import time
+import math
 
 from exchange import Exchange, Upbit, Binance, Futures
 from telegram import Telegram
@@ -23,7 +24,6 @@ def send_upbit_to_binance(upbit, binance, coin_symbol, amount):
 	upbit_withdraw = upbit.withdraw(coin_symbol, amount, binance_coin_address, binance_coin_tag)
 	
 	# Get Transaction id by withdraw id
-	# TODO : Of course, need to make it async
 	while True:
 		# history is chronological sequence
 		upbit_withdraw_history = upbit.fetch_withdrawals(coin_symbol, upbit_server_time - Exchange.EPOCH_TIME_TWO_HOUR_MS, None)
@@ -39,7 +39,6 @@ def send_upbit_to_binance(upbit, binance, coin_symbol, amount):
 		
 		time.sleep(1)
 
-	# TODO : Of course, need to make it async
 	while True:
 		# history is chronological sequence
 		# Don't know when binance gets submission. So start_time must cover long range.
@@ -77,7 +76,6 @@ def send_binance_to_upbit(upbit, binance, coin_symbol, amount):
 	binance_withdraw = binance.withdraw(coin_symbol, amount, upbit_coin_address, upbit_coin_tag)
 
 	# Get Transaction id by withdraw id
-	# TODO : Of course, need to make it async
 	while True:
 		# history is chronological sequence
 		binance_withdraw_history = binance.fetch_withdrawals(coin_symbol, binance_server_time - Exchange.EPOCH_TIME_TWO_HOUR_MS, None)
@@ -93,7 +91,6 @@ def send_binance_to_upbit(upbit, binance, coin_symbol, amount):
 		
 		time.sleep(1)
 		
-	# TODO : Of course, need to make it async
 	while True:
 		# history is chronological sequence
 		# Don't know when upbit gets submission. So start_time must cover long range.
@@ -124,7 +121,6 @@ def internal_transfer_usdt(binance, amount_usdt, direction_type):
 	})
 	
 	# Check if transaction is finished
-	# TODO : Of course, need to make it async
 	while True:
 		futures_transaction_history = binance.sapi_get_futures_transfer({
 			'startTime': start_time - Exchange.EPOCH_TIME_TWO_HOUR_MS,  # Because timestamp is floor(serverTime) by second, subtract 1 hour
@@ -160,13 +156,8 @@ def send_coin_upbit_to_binance_perfect_hedge(upbit, binance, futures, coin_symbo
 		# HIGHLIGHT: 2-2. [Futures] Short
 		Futures.market_short(futures, coin_symbol, coin_count, False)
 		
-		# ---------- wait until buy, short done... TODO: so it is needed to be async
-		time.sleep(5)
-		
 		# HIGHLIGHT: 3. [Upbit->Binance] send
-		decimal_places = 6 # upbit withdraw_decimal_places <= 6
-		upbit_bought_coin_count = Upbit.fetch_coin_count(upbit, coin_symbol)
-		send_upbit_to_binance(upbit, binance, coin_symbol, round(upbit_bought_coin_count, decimal_places))
+		send_upbit_to_binance(upbit, binance, coin_symbol, coin_count)
 		
 		# HIGHLIGHT: 4-1. [Binance] Sell
 		Binance.create_market_sell_order(binance, coin_symbol, coin_count)
@@ -180,6 +171,8 @@ def send_coin_upbit_to_binance_perfect_hedge(upbit, binance, futures, coin_symbo
 	except Exception as e:
 		Telegram.send_message(e)
 		logger.logger.error(e)
+		
+		exit()
 	
 def send_coin_binance_to_upbit_prefect_hedge(upbit, binance, futures, coin_symbol, coin_count):
 	try:
@@ -187,16 +180,13 @@ def send_coin_binance_to_upbit_prefect_hedge(upbit, binance, futures, coin_symbo
 		
 		# HIGHLIGHT: 2-1. [Binance] Buy
 		Binance.create_market_buy_order(binance, coin_symbol, coin_count)
+		bought_coin_count = coin_count * (1.0 - Binance.TAKER_FEE)
+		coin_count = Exchange.safe_coin_amount(upbit, binance, futures, coin_symbol, bought_coin_count)
 		
 		# HIGHLIGHT: 2-2. [Futures] Short
 		Futures.market_short(futures, coin_symbol, coin_count, False)
 		
-		# ---------- wait until buy, short done... TODO: so it is needed to be async
-		time.sleep(5)
-		
 		# HIGHLIGHT: 3. [Binance->Upbit] send
-		decimal_places = 6
-		coin_count = round(coin_count, decimal_places)
 		send_binance_to_upbit(upbit, binance, coin_symbol, coin_count)
 		
 		# HIGHLIGHT: 4-1. [Upbit] Sell
@@ -211,3 +201,5 @@ def send_coin_binance_to_upbit_prefect_hedge(upbit, binance, futures, coin_symbo
 	except Exception as e:
 		Telegram.send_message(e)
 		logger.logger.error(e)
+		
+		exit()

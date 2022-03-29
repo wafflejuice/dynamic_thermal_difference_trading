@@ -1,83 +1,63 @@
 from exchange.base_exchange import BaseExchange
+from binance.spot import Spot
 
 
 class Binance(BaseExchange):
 	TAKER_FEE = 0.001
 	
-	
-	@classmethod
-	def get_coin_id(cls, coin_symbol):
-		return coin_symbol + '/' + cls.USDT_SYMBOL
-	
-	@staticmethod
-	def fetch_server_time(binance):
-		return binance.fetch_time()
-	
-	@staticmethod
-	def fetch_market_symbols(binance):
-		binance_markets = binance.fetch_markets()
-		binance_symbols = []
-		
-		for market in binance_markets:
-			if market['quote'] == 'USDT':
-				binance_symbols.append(market['base'])
-		
-		return binance_symbols
-	
-	@classmethod
-	def fetch_balance(cls, binance):
-		return binance.fetch_balance()[cls.USDT_SYMBOL]['free']
-	
-	@staticmethod
-	def fetch_coin_count(binance, coin_symbol):
-		return binance.fetch_balance()[coin_symbol]['free']
+	def __init__(self, api_key, secret_key):
+		self._api_key = api_key
+		self._secret_key = secret_key
 
-	@classmethod
-	def fetch_coin_price(cls, binance, coin_symbol):
-		return binance.fetch_ticker(cls.get_coin_id(coin_symbol))['last']
-	
-	@classmethod
-	def fetch_market_restricts(cls, binance, coin_symbol):
-		binance.load_markets()
-		market = binance.markets[cls.get_coin_id(coin_symbol)]
+		self._client = Spot(key=api_key, secret=secret_key)
 		
-		return market
 	
-	@classmethod
-	def fetch_coin_price_precision(cls, binance, coin_symbol):
-		restricts = cls.fetch_market_restricts(binance, coin_symbol)
-		price_precision = restricts['precision']['price']
-		
-		return price_precision
+	def to_market_code(self, symbol, market):
+		pass
 	
-	@classmethod
-	def fetch_coin_amount_precision(cls, binance, coin_symbol):
-		restricts = cls.fetch_market_restricts(binance, coin_symbol)
-		quantity_precision = restricts['precision']['amount']
-		
-		return quantity_precision
+	def to_symbol(self, market_code):
+		pass
 	
-	@classmethod
-	def is_wallet_limitless(cls, binance, coin_symbol):
-		configs = binance.sapi_get_capital_config_getall()
-		
-		for config in configs:
-			if config['coin'] == coin_symbol:
-				return config['depositAllEnable'] and config['withdrawAllEnable'] and config['trading']
-		
-		return None
+	def fetch_server_timestamp(self):
+		return self.time()
 	
-	@classmethod
-	def fetch_coin_withdraw_fee(cls, binance, coin_symbol):
-		return binance.fetch_funding_fees()['withdraw'][coin_symbol]
+	def fetch_symbols(self):
+		pass
 	
-	@classmethod
-	def create_market_buy_order(cls, binance, coin_symbol, coin_count):
-		binance.create_market_buy_order(cls.get_coin_id(coin_symbol), coin_count)  # , {'test':True,})
-		
-	@classmethod
-	def create_market_sell_order(cls, binance, coin_symbol, coin_count):
-		binance.create_market_sell_order(cls.get_coin_id(coin_symbol), coin_count)  # , {'test':True,})
+	def fetch_price(self, symbol, market):
+		pass
+	
+	def fetch_balance(self, symbol):
+		pass
+	
+	def is_wallet_withdrawable(self, symbol, amount=0.0):
+		pass
+	
+	def is_wallet_depositable(self, symbol):
+		pass
+	
+	def fetch_withdraw_fee(self, symbol):
+		pass
+	
+	def withdraw(self, symbol, to_addr, to_tag, amount, chain=None):
+		pass
+	
+	def wait_withdraw(self, uuid):
+		pass
+	
+	def fetch_txid(self, uuid):
+		pass
+	
+	def wait_deposit(self, txid):
+		pass
+	
+	def create_market_buy_order(self, symbol, market, price):
+		pass
+	
+	def create_market_sell_order(self, symbol, market, volume):
+		pass
+
+
 class Futures(BaseExchange):
 	TAKER_FEE = 0.0004
 	
@@ -90,7 +70,7 @@ class Futures(BaseExchange):
 		return futures.fetch_time()
 	
 	@staticmethod
-	def fetch_market_symbols(futures):
+	def fetch_coin_symbols(futures):
 		futures_markets = futures.fetch_markets()
 		futures_symbols = []
 		

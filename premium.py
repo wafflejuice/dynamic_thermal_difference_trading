@@ -12,36 +12,58 @@ class Kimp:
 	bound = [-0.06, -0.04, -0.02, 0.0, +0.02, +0.04, +0.06]
 	
 	@staticmethod
-	def calculate_kimp(upbit, binance, coin_symbol):
-		upbit_coin_price_krw = Upbit.fetch_coin_price(upbit, coin_symbol)
-		binance_coin_price_krw = Binance.fetch_coin_price(binance, coin_symbol) * currency.fetch_usd_krw_currency()
+	def calculate_premium(coin_symbol, from_ex, to_ex, from_currency='krw', to_currency='krw'):
+		usd_krw_price = currency.fetch_usd_krw_price()
 		
-		return (upbit_coin_price_krw - binance_coin_price_krw) / binance_coin_price_krw
+		from_ex_price_krw = from_ex.fetch_coin_price(from_ex, coin_symbol)
+		to_ex_price_krw = to_ex.fetch_coin_price(to_ex, coin_symbol) * currency.fetch_usd_krw_price()
+		
+		if from_currency == 'krw':
+			pass
+		elif from_currency == 'usd':
+			from_ex_price_krw *= usd_krw_price
+		
+		if to_currency == 'krw':
+			pass
+		elif to_currency == 'usd':
+			to_ex_price_krw *= usd_krw_price
+		
+		return (to_ex_price_krw - from_ex_price_krw) / from_ex_price_krw
 	
 	@classmethod
-	def calculate_kimps(cls, upbit, binance, coin_symbols, reverse):
-		coin_upbit_ids = []
-		coin_binance_ids = []
+	def calculate_premiums(cls, coin_symbols, from_ex, to_ex, from_currency='krw', to_currency='krw'):
+		usd_krw_price = currency.fetch_usd_krw_price()
+		
+		from_ex_coin_ids = []
+		to_ex_coin_ids = []
 		
 		for coin_symbol in coin_symbols:
-			coin_upbit_ids.append(Upbit.get_coin_id(coin_symbol))
-			coin_binance_ids.append(Binance.get_coin_id(coin_symbol))
+			from_ex_coin_ids.append(Upbit.get_coin_id(coin_symbol))
+			to_ex_coin_ids.append(Binance.get_coin_id(coin_symbol))
 		
-		upbit_tickers = upbit.fetch_tickers()
-		binance_tickers = binance.fetch_tickers()
+		from_ex_tickers = from_ex.fetch_tickers()
+		to_ex_tickers = to_ex.fetch_tickers()
 		
-		coin_kimps = {}
-		usd_krw_currency = currency.fetch_usd_krw_currency()
+		coin_premiums = {}
 		
-		for i in range(len(coin_upbit_ids)):
-			if coin_upbit_ids[i] in upbit_tickers.keys() and coin_binance_ids[i] in binance_tickers.keys():
-				upbit_coin_price_krw = upbit_tickers[coin_upbit_ids[i]]['last']
-				binance_coin_price_usdt = binance_tickers[coin_binance_ids[i]]['last']
-				binance_coin_price_krw = binance_coin_price_usdt * usd_krw_currency
+		for i in range(len(from_ex_coin_ids)):
+			if from_ex_coin_ids[i] in from_ex_tickers.keys() and to_ex_coin_ids[i] in to_ex_tickers.keys():
+				from_ex_price_krw = from_ex_tickers[from_ex_coin_ids[i]]['last']
+				to_ex_price_krw = to_ex_tickers[to_ex_coin_ids[i]]['last']
 				
-				coin_kimps[coin_symbols[i]] = (upbit_coin_price_krw - binance_coin_price_krw) / binance_coin_price_krw
+				if from_currency == 'krw':
+					pass
+				elif from_currency == 'usd':
+					from_ex_price_krw *= usd_krw_price
 				
-		return {k: v for k, v in sorted(coin_kimps.items(), key=lambda item: item[1], reverse=reverse)}
+				if to_currency == 'krw':
+					pass
+				elif to_currency == 'usd':
+					to_ex_price_krw *= usd_krw_price
+				
+				coin_premiums[coin_symbols[i]] = (to_ex_price_krw - from_ex_price_krw) / from_ex_price_krw
+				
+		return {k: v for k, v in sorted(coin_premiums.items(), key=lambda item: item[1])}
 
 	@staticmethod
 	def calculate_transfer_balance_ratio(previous_stage, current_stage):

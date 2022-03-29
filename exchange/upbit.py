@@ -153,9 +153,12 @@ class Upbit(BaseExchange):
 			'currency': currency,
 			'amount': amount,
 			'address': address,
-			'secondary_address': secondary_address,
+			# 'secondary_address': secondary_address,
 			'transaction_type': transaction_type,
 		}
+		if secondary_address is not None:
+			query['secondary_address'] = secondary_address
+		
 		query_string = urlencode(query).encode()
 		
 		m = hashlib.sha512()
@@ -178,17 +181,27 @@ class Upbit(BaseExchange):
 		return res.json()
 	
 	def withdraw(self, symbol, to_addr, to_tag, amount, chain=None):
+		# upbit allows upto 6 decimal point at withdrawal amount.
+		amount = int(amount * 1000000) / 1000000
+		print(amount)
 		res = self._post_withdraws_coin(symbol, amount, to_addr, to_tag, 'default')
-		
+		print(res)
 		return res['uuid']
 	
 	def _get_withdraw(self, uuid_, txid, currency):
 		url = 'https://api.upbit.com/v1/withdraw'
 		query = {
-			'uuid': uuid_,
-			'txid': txid,
-			'currency': currency,
+			# 'uuid': uuid_,
+			# 'txid': txid,
+			# 'currency': currency,
 		}
+		if uuid_ is not None:
+			query['uuid'] = uuid_
+		if txid is not None:
+			query['txid'] = txid
+		if currency is not None:
+			query['currency'] = currency
+			
 		query_string = urlencode(query).encode()
 		
 		m = hashlib.sha512()
@@ -212,7 +225,7 @@ class Upbit(BaseExchange):
 	
 	def wait_withdraw(self, uuid):
 		withdraw_response = self._get_withdraw(uuid, None, None)
-		
+		print(withdraw_response)
 		start_time_s = time.time()
 		term_s = 1
 		while True:
@@ -232,7 +245,20 @@ class Upbit(BaseExchange):
 	def fetch_txid(self, uuid):
 		res = self._get_withdraw(uuid, None, None)
 		
-		return res['txid']
+		start_time_s = time.time()
+		term_s = 1
+		
+		while True:
+			if time.time() - start_time_s < term_s:
+				continue
+				
+			if res['txid'] is not None:
+				return res['txid']
+			
+			res = self._get_withdraw(uuid, None, None)
+			start_time_s = time.time()
+		
+		return None
 	
 	def _get_deposit(self, uuid_, txid, currency):
 		url = 'https://api.upbit.com/v1/deposit'
@@ -286,10 +312,17 @@ class Upbit(BaseExchange):
 		query = {
 			'market': self.to_market_code(symbol, market),
 			'side': side,
-			'volume': volume,
-			'price': price,
+			# 'volume': volume,
+			# 'price': price,
 			'ord_type': ord_type,
 		}
+		
+		if volume is not None:
+			query['volume'] = volume
+		if price is not None:
+			query['price'] = price
+			
+		print(query)
 		
 		query_string = urlencode(query).encode()
 		
@@ -313,10 +346,14 @@ class Upbit(BaseExchange):
 		return res.json()
 
 	def create_market_buy_order(self, symbol, market, price):
-		return self._post_orders(symbol, market, 'bid', None, price, 'market')
+		res = self._post_orders(symbol, market, 'bid', None, price, 'price')
+		
+		return res['uuid']
 	
 	def create_market_sell_order(self, symbol, market, volume):
-		return self._post_orders(symbol, market, 'ask', volume, None, 'market')
+		res = self._post_orders(symbol, market, 'ask', volume, None, 'market')
+		
+		return res['uuid']
 	
 	def _get_order(self, uuid_):
 		url = 'https://api.upbit.com/v1/order'
@@ -347,6 +384,11 @@ class Upbit(BaseExchange):
 		# 'cancel' can be shown in completed order, because there can remain dusts of krw.
 		return res.json()
 	
+	def order_executed(self, uuid):
+		res = self._get_order(uuid)
+		
+		return float(res['executed_volume'])
+	
 	def wait_order(self, uuid):
 		order_response = self._get_order(uuid)
 		
@@ -361,15 +403,23 @@ class Upbit(BaseExchange):
 				
 			order_response = self._get_order(uuid)
 			start_time_s = time.time()
+			
+		if self.is_order_fully_executed(uuid):
+			return True
+		
+		return False
+	
+	def is_order_fully_executed(self, uuid):
+		order_response = self._get_order(uuid)
 		
 		if order_response['state'] == 'done':
 			return True
 		elif order_response['state'] == 'cancel':
-			if float(order_response['remaining_volume']) < 0.00000001:
+			# Can't determine whether it's valid by remaining_volume,
+			# because market-buy has no volume!!
+			if order_response['ord_type'] == 'price' and float(order_response['executed_volume']) > 0:
 				return True
-			
-		return False
-
+		
 	def _delete_order(self, uuid_):
 		url = 'https://api.upbit.com/v1/order'
 		query = {
@@ -400,23 +450,28 @@ class Upbit(BaseExchange):
 		return self._delete_order(uuid)
 
 	def valid_price(self, price):
-		def ceil(val, unit):
+		def floor(val, unit):
 			return int(val / unit) * unit
+		
 		if 2000000 <= price:
-			return ceil(price, 1000)
+			return floor(price, 1000)
 		elif 1000000 <= price:
-			return ceil(price, 500)
+			return floor(price, 500)
 		elif 500000 <= price:
-			return ceil(price, 100)
+			return floor(price, 100)
 		elif 100000 <= price:
-			return ceil(price, 50)
+			return floor(price, 50)
 		elif 10000 <= price:
-			return ceil(price, 10)
+			return floor(price, 10)
 		elif 1000 <= price:
-			return ceil(price, 5)
+			return floor(price, 5)
 		elif 100 <= price:
-			return ceil(price, 1)
+			return floor(price, 1)
 		elif 10 <= price:
-			return ceil(price, 0.1)
-		elif 0 <= price:
-			return ceil(price, 0.01)
+			return floor(price, 0.1)
+		elif 1 <= price:
+			return floor(price, 0.01)
+		elif 0.1 <= price:
+			return floor(price, 0.001)
+		return floor(price, 0.0001)
+		

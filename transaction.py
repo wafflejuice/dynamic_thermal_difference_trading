@@ -4,116 +4,26 @@ from exchange.base_exchange import BaseExchange
 from exchange.binance import Binance, Futures
 from exchange.upbit import Upbit
 from telegram import Telegram
-from config import Config
 import logger
 
-# TODO : balance check
-def send_upbit_to_binance(upbit, binance, coin_symbol, amount):
-	logger.logger.info(time.strftime('%c', time.localtime(time.time())) + ' : send upbit to binance start')
+def withdraw(symbol, from_ex, to_ex, to_addr, to_tag, chain, amount):
+	withdraw_id = from_ex.withdraw(symbol, to_addr, to_tag, amount, chain)
+	# logger.logger.info('withdraw_id : {}'.format(withdraw_id))
+	
+	if not from_ex.wait_withdraw(withdraw_id):
+		return False
+	
+	withdraw_txid = from_ex.fetch_txid(withdraw_id)
+	
+	if not to_ex.wait_deposit(withdraw_txid):
+		return False
 
-	config = Config.load_config()
-	binance_coin_address = config['binance']['address'][coin_symbol] if coin_symbol in config['binance']['address'] else None
-	binance_coin_tag = config['binance']['tag'][coin_symbol] if coin_symbol in config['binance']['tag'] else None
+	# logger.logger.info(time.strftime('%c', time.localtime(time.time())) + ' : send upbit to binance complete')
+	return True
 	
-	if binance_coin_address is None:
-		logger.logger.info(time.strftime('%c', time.localtime(time.time())) + ' : send upbit to binance : No binance %s address'.format(coin_symbol))
-		return
-	
-	upbit_server_time = Upbit.fetch_server_time(upbit)
-	binance_server_time = Binance.fetch_server_time(binance)
-	
-	upbit_withdraw = upbit.withdraw(coin_symbol, amount, binance_coin_address, binance_coin_tag)
-	logger.logger.info('upbit withdraw response : {}'.format(upbit_withdraw))
-	
-	# Get Transaction id by withdraw id
-	while True:
-		# history is chronological sequence
-		upbit_withdraw_history = upbit.fetch_withdrawals(coin_symbol, upbit_server_time - BaseExchange.EPOCH_TIME_TWO_HOUR_MS, None)
-		
-		# if withdraw history is not empty
-		if upbit_withdraw_history:
-			upbit_last_withdraw = upbit_withdraw_history[-1]
-			
-			# Transaction id is None at first. It is given after accessing the block-chain network
-			if upbit_last_withdraw['txid']:
-				if upbit_last_withdraw['id'] == upbit_withdraw['id']:
-					break
-		
-		time.sleep(1)
+''' Legacy codes below '''
 
-	while True:
-		# history is chronological sequence
-		# Don't know when binance gets submission. So start_time must cover long range.
-		# Assumption: A transaction time is under 1 hour
-		binance_deposit_history = binance.fetch_deposits(coin_symbol, binance_server_time - BaseExchange.EPOCH_TIME_TWO_HOUR_MS, None)
-		
-		# if deposit history is not empty
-		if binance_deposit_history:
-			binance_last_deposit = binance_deposit_history[-1]
-			
-			# status: 'pending'->'ok'
-			if binance_last_deposit['txid'] == upbit_last_withdraw['txid'] and binance_last_deposit['status'] == 'ok':
-				break
-		
-		time.sleep(1)
-
-	logger.logger.info(time.strftime('%c', time.localtime(time.time())) + ' : send upbit to binance complete')
-	
-# TODO : balance check
-def send_binance_to_upbit(upbit, binance, coin_symbol, amount):
-	logger.logger.info(time.strftime('%c', time.localtime(time.time())) + ' : send binance to upbit start')
-
-	config = Config.load_config()
-	upbit_coin_address = config['upbit']['address'][coin_symbol] if coin_symbol in config['upbit']['address'] else None
-	upbit_coin_tag = config['upbit']['tag'][coin_symbol] if coin_symbol in config['upbit']['tag'] else None
-	
-	if upbit_coin_address is None:
-		logger.logger.info(time.strftime('%c', time.localtime(time.time())) + ' : send upbit to binance : No binance %s address'.format(coin_symbol))
-		return
-
-	upbit_server_time = Upbit.fetch_server_time(upbit)
-	binance_server_time = Binance.fetch_server_time(binance)
-	
-	# response example: {'info': {'success': True, 'id': 'f22641814f3098768efe6e9e7eb253xd'}, 'id': 'f22641814f3098768efe6e9e7eb253xd'}
-	binance_withdraw = binance.withdraw(coin_symbol, amount, upbit_coin_address, upbit_coin_tag)
-	logger.logger.info('binance withdraw response : {}'.format(binance_withdraw))
-
-	# Get Transaction id by withdraw id
-	while True:
-		# history is chronological sequence
-		binance_withdraw_history = binance.fetch_withdrawals(coin_symbol, binance_server_time - BaseExchange.EPOCH_TIME_TWO_HOUR_MS, None)
-		
-		# if withdraw history is not empty
-		if binance_withdraw_history:
-			binance_last_withdraw = binance_withdraw_history[-1]
-			
-			# Transaction id is None at first. It is given after accessing the block-chain network
-			if binance_last_withdraw['txid']:
-				if binance_last_withdraw['id'] == binance_withdraw['id']:
-					break
-		
-		time.sleep(1)
-		
-	while True:
-		# history is chronological sequence
-		# Don't know when upbit gets submission. So start_time must cover long range.
-		# Assumption: A transaction time is under 1 hour
-		upbit_deposit_history = upbit.fetch_deposits(coin_symbol, upbit_server_time - BaseExchange.EPOCH_TIME_TWO_HOUR_MS, None)
-		
-		# if deposit history is not empty
-		if upbit_deposit_history:
-			upbit_last_deposit = upbit_deposit_history[-1]
-			
-			# status: 'PROCESSING'->'ok'
-			if upbit_last_deposit['txid'] == binance_last_withdraw['txid'] and upbit_last_deposit['status'] == 'ok':
-				break
-		
-		time.sleep(1)
-	
-	logger.logger.info(time.strftime('%c', time.localtime(time.time())) + ' : send binance to upbit complete')
-		
 # direction_type 1: Binance->Futures, 2: Futures->Binance
-# TODO : balance check
 def internal_transfer_usdt(binance, amount_usdt, direction_type):
 	start_time = Binance.fetch_server_time(binance)
 	
@@ -167,7 +77,7 @@ def send_coin_upbit_to_binance_perfect_hedge(upbit, binance, futures, coin_symbo
 		time.sleep(5)
 		
 		# HIGHLIGHT: 3. [Upbit->Binance] send
-		send_upbit_to_binance(upbit, binance, coin_symbol, coin_count)
+		withdraw(upbit, binance, coin_symbol, coin_count)
 
 		# upbit withdraw fee
 		sended_coin_count = coin_count - Upbit.fetch_coin_withdraw_fee(upbit, coin_symbol)

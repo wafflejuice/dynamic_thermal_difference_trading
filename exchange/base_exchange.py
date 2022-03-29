@@ -1,8 +1,6 @@
 import abc
 import math
 
-from exchange.binance import Binance, Futures
-from exchange.upbit import Upbit
 from telegram import Telegram
 
 
@@ -14,77 +12,124 @@ class BaseExchange:
 	
 	EPOCH_TIME_TWO_HOUR_MS = 7200000
 
-	@classmethod
 	@abc.abstractmethod
-	def get_coin_id(cls, coin_symbol):
-		pass
-
-	@staticmethod
-	@abc.abstractmethod
-	def fetch_server_time(exchange):
-		pass
-
-	@classmethod
-	@abc.abstractmethod
-	def fetch_balance(cls, exchange):
-		pass
-
-	@staticmethod
-	@abc.abstractmethod
-	def fetch_coin_count(exchange, coin_symbol):
+	def to_market_code(self, symbol, market):
 		pass
 	
-	@staticmethod
 	@abc.abstractmethod
-	def withdraw(coin_symbol, from_ex, to_ex, amount):
+	def to_symbol(self, market_code):
 		pass
 
-	@staticmethod
-	def telegram_me_balance(upbit, binance, futures):
-		upbit_balance = 'upbit balance=' + str(Upbit.fetch_balance(upbit)) + 'KRW'
-		binance_balance = 'binance balance=' + str(Binance.fetch_balance(binance)) + 'USDT'
-		futures_balance = 'futures balance=' + str(Futures.fetch_balance(futures)) + 'USDT'
+	@abc.abstractmethod
+	def fetch_server_timestamp(self):
+		pass
+
+	@abc.abstractmethod
+	def fetch_symbols(self):
+		pass
+
+	@abc.abstractmethod
+	def fetch_price(self, symbol, market):
+		pass
 		
-		args = [upbit_balance, binance_balance, futures_balance]
-		Telegram.send_message(Telegram.args_to_message(args))
+	@abc.abstractmethod
+	def fetch_balance(self, symbol):
+		pass
+	
+	@abc.abstractmethod
+	def is_wallet_withdrawable(self, symbol, amount=0.0):
+		pass
+
+	@abc.abstractmethod
+	def is_wallet_depositable(self, symbol):
+		pass
+
+	@abc.abstractmethod
+	def fetch_withdraw_fee(self, symbol):
+		pass
+	
+	@abc.abstractmethod
+	def withdraw(self, symbol, to_addr, to_tag, amount, chain=None):
+		pass
+
+	@abc.abstractmethod
+	def wait_withdraw(self, uuid):
+		pass
+
+	@abc.abstractmethod
+	def fetch_txid(self, uuid):
+		pass
+	
+	@abc.abstractmethod
+	def wait_deposit(self, txid):
+		pass
+	
+	@abc.abstractmethod
+	def create_market_buy_order(self, symbol, market, price):
+		pass
+	
+	@abc.abstractmethod
+	def create_market_sell_order(self, symbol, market, volume):
+		pass
+
+class ExchangeHelper:
+	@staticmethod
+	def notify_balance(exchanges):
+		notify_string = ''
+		for exchange in exchanges:
+			notify_string += str(exchange.fetch_balance('KRW')) + 'KRW, ' + str(exchange.fetch_balance('USD')) + 'USD'
+			notify_string += Telegram.LINE_BREAK
+		
+		Telegram.send_message(notify_string)
 	
 	@staticmethod
-	def coin_symbols_intersection(upbit, binance, futures):
-		upbit_market_symbols = Upbit.fetch_market_symbols(upbit)
-		binance_market_symbols = Binance.fetch_market_symbols(binance)
-		futures_market_symbols = Futures.fetch_market_symbols(futures)
-		
-		market_symbols_intersection =  set(upbit_market_symbols) & set(binance_market_symbols) & set(futures_market_symbols)
-		
+	def coin_symbols_intersection(exchanges):
+		exchange_market_symbols_list = []
+		for ex in exchanges:
+			exchange_market_symbols_list.append(ex.fetch_coin_symbols(ex))
+
+		market_symbols_intersection = set()
+		for exchange_market_symbols in exchange_market_symbols_list:
+			if len(market_symbols_intersection) == 0:
+				market_symbols_intersection = set(exchange_market_symbols)
+			else:
+				market_symbols_intersection |= set(exchange_market_symbols)
+				
 		return market_symbols_intersection
 	
 	@staticmethod
-	def fetch_min_coin_price_precision(upbit, binance, futures, coin_symbol):
-		upbit_price_precision = Upbit.fetch_coin_price_precision(upbit, coin_symbol)
-		binance_price_precision = Binance.fetch_coin_price_precision(binance, coin_symbol)
-		futures_price_precision = Futures.fetch_coin_price_precision(futures, coin_symbol)
+	def min_price_precision(symbol, exchanges):
+		min_precision = math.inf
 		
-		return min(upbit_price_precision, binance_price_precision, futures_price_precision)
+		for exchange in exchanges:
+			precision = exchange.fetch_price_precision(symbol)
+			if min_precision > precision:
+				min_precision = precision
+				
+		return min_precision
 	
-	@classmethod
-	def safe_coin_price(cls, upbit, binance, futures, coin_symbol, coin_price):
-		min_price_precision = cls.fetch_min_coin_price_precision(upbit, binance, futures, coin_symbol)
+	@staticmethod
+	def safe_coin_price(symbol, exchanges, coin_price):
+		min_price_precision = ExchangeHelper.min_price_precision(symbol, exchanges)
 		floor_factor = math.pow(10.0, min_price_precision)
 		
 		return math.floor(coin_price * floor_factor) / floor_factor
 	
 	@staticmethod
-	def fetch_min_coin_amount_precision(upbit, binance, futures, coin_symbol):
-		upbit_amount_precision = Upbit.fetch_coin_amount_precision(upbit, coin_symbol)
-		binance_amount_precision = Binance.fetch_coin_amount_precision(binance, coin_symbol)
-		futures_amount_precision = Futures.fetch_coin_amount_precision(futures, coin_symbol)
+	def min_amount_precision(symbol, exchanges):
+		min_precision = math.inf
 		
-		return min(upbit_amount_precision, binance_amount_precision, futures_amount_precision)
+		for exchange in exchanges:
+			precision = exchange.fetch_amount_precision(symbol)
+			if min_precision > precision:
+				min_precision = precision
+		
+		return min_precision
 	
-	@classmethod
-	def safe_coin_amount(cls, upbit, binance, futures, coin_symbol, coin_amount):
-		min_amount_precision = cls.fetch_min_coin_amount_precision(upbit, binance, futures, coin_symbol)
-		min_amount_precision = min(min_amount_precision, 6) # 6 for upbit withdraw precision
+	@staticmethod
+	def safe_coin_amount(symbol, exchanges, amount):
+		min_amount_precision = ExchangeHelper.min_amount_precision(symbol, exchanges)
+		# min_amount_precision = min(min_amount_precision, 6) # 6 for upbit withdraw precision
 		floor_factor = math.pow(10.0, min_amount_precision)
 		
-		return math.floor(coin_amount * floor_factor) / floor_factor
+		return math.floor(amount * floor_factor) / floor_factor

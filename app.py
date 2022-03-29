@@ -1,4 +1,3 @@
-import ccxt
 import time
 
 from exchange.base_exchange import BaseExchange
@@ -137,15 +136,40 @@ def trading_logic(upbit, binance, futures):
 def run():
 	config = Config.load_config()
 	
-	upbit = ccxt.upbit({'apiKey': config['upbit']['key']['api key'], 'secret': config['upbit']['key']['secret key']})
-	binance = ccxt.binance({'apiKey': config['binance']['key']['api key'], 'secret': config['binance']['key']['secret key']})
-	futures = ccxt.binance({
-		'apiKey': config['binance']['key']['api key'],
-		'secret': config['binance']['key']['secret key'],
-		'enableRateLimit': True,
-		'options': {
-			'defaultType': 'future',
-		},
-	})
-
-	trading_logic(upbit, binance, futures)
+	upbit_api_key = config['upbit']['key']['api key']
+	upbit_secret_key = config['upbit']['key']['secret key']
+	upbit = Upbit(upbit_api_key, upbit_secret_key)
+	
+	binance_api_key = config['binance']['key']['api key']
+	binance_secret_key = config['binance']['key']['secret key']
+	
+	symbol = 'ANKR'
+	market = 'KRW'
+	
+	# print(upbit.to_market_code(market, symbol))
+	# print(upbit.to_symbol('KRW-BTC'))
+	# print(upbit.fetch_server_timestamp())
+	# print(upbit.fetch_symbols())
+	# print(upbit.fetch_price(symbol, market))
+	# print(upbit.fetch_balance(symbol))
+	
+	# print(upbit.is_wallet_withdrawable(symbol))
+	# print(upbit.is_wallet_depositable(symbol))
+	
+	# print(upbit.fetch_withdraw_fee(symbol))
+	# print(upbit.fetch_withdraw_fee(symbol) * upbit.fetch_price(symbol, market))
+	
+	uuid = upbit.withdraw()
+	print(uuid)
+	print(upbit.wait_withdraw(uuid))
+	txid = upbit.fetch_txid(uuid)
+	print(txid)
+	
+	print(upbit.wait_deposit(txid))
+	uuid = upbit.create_market_buy_order(symbol, market, 10000)
+	print(upbit.wait_order(uuid))
+	uuid = upbit.create_market_sell_order(symbol, market, 1)
+	print(upbit.wait_order(uuid))
+	# trading_logic(upbit, binance, futures)
+	
+	print(upbit.cancel_order(uuid))

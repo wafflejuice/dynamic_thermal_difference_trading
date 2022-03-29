@@ -1,79 +1,422 @@
 from exchange.base_exchange import BaseExchange
 
+import jwt
+import uuid
+import hashlib
+from urllib.parse import urlencode
+import requests
+import time
+
 
 class Upbit(BaseExchange):
-	@classmethod
-	def get_coin_id(cls, coin_symbol):
-		return coin_symbol + '/' + cls.KRW_SYMBOL
+	KRW_SYMBOL = 'KRW'
 	
-	@staticmethod
-	def fetch_server_time(upbit):
-		ticker = upbit.public_get_ticker({
-			'markets': 'KRW-XRP' # The market kind has no effect. Only used for fetching server time.
-		})
-		server_time = int(ticker[0]['timestamp'])
+	def __init__(self, api_key, secret_key):
+		self._api_key = api_key
+		self._secret_key = secret_key
+	
+	def to_market_code(self, symbol, market):
+		return '{}-{}'.format(market, symbol)
+	
+	# ex. 'KRW-ETH' to 'ETH'
+	def to_symbol(self, market_code):
+		return market_code.split('-')[1]
+	
+	def _get_ticker(self, market_code):
+		url = "https://api.upbit.com/v1/ticker"
+		query = {"markets": market_code}
+		res = requests.request("GET", url, params=query)
 		
-		return server_time
+		return res.json()
 	
-	@staticmethod
-	def fetch_market_symbols(upbit):
-		upbit_markets = upbit.fetch_markets()
-		upbit_symbols = []
+	def fetch_server_timestamp(self):
+		ticker = self._get_ticker(self.to_market_code('BTC', 'KRW'))
+		timestamp_ms = int(ticker[0]['timestamp'])
 		
-		for market in upbit_markets:
-			if market['quote'] == 'KRW':
-				upbit_symbols.append(market['base'])
+		return timestamp_ms
+
+	def fetch_symbols(self):
+		url = "https://api.upbit.com/v1/market/all"
+		querystring = {"isDetails": "false"}
 		
-		return upbit_symbols
-	
-	@classmethod
-	def fetch_balance(cls, upbit):
-		return upbit.fetch_balance()[cls.KRW_SYMBOL]['free']
-	
-	@staticmethod
-	def fetch_coin_count(upbit, coin_symbol):
-		return upbit.fetch_balance()[coin_symbol]['free']
-	
-	@classmethod
-	def fetch_coin_price(cls, upbit, coin_symbol):
-		return upbit.fetch_ticker(cls.get_coin_id(coin_symbol))['last']
-	
-	@classmethod
-	def fetch_market_restricts(cls, upbit, coin_symbol):
-		upbit.load_markets()
-		market = upbit.markets[cls.get_coin_id(coin_symbol)]
+		res = requests.request("GET", url, params=querystring)
+		res = res.json()
+		markets = list(map(lambda x: self.to_symbol(x['market']), res))
 		
-		return market
+		return markets
 	
-	@classmethod
-	def fetch_coin_price_precision(cls, upbit, coin_symbol):
-		restricts = cls.fetch_market_restricts(upbit, coin_symbol)
-		price_precision = restricts['precision']['price']
+	def fetch_price(self, symbol, market):
+		ticker = self._get_ticker(self.to_market_code(symbol, market))
 		
-		return price_precision
+		return float(ticker[0]['trade_price'])
 	
-	@classmethod
-	def fetch_coin_amount_precision(cls, upbit, coin_symbol):
-		restricts = cls.fetch_market_restricts(upbit, coin_symbol)
-		quantity_precision = restricts['precision']['amount']
+	def _fetch_balance(self):
+		url = "https://api.upbit.com/v1/accounts"
+		payload = {
+			'access_key': self._api_key,
+			'nonce': str(uuid.uuid4()),
+		}
 		
-		return quantity_precision
-	
-	@classmethod
-	def is_wallet_limitless(cls, upbit, coin_symbol):
-		return upbit.fetch_currency_by_id(coin_symbol)['active']
-	
-	@classmethod
-	def fetch_coin_withdraw_fee(cls, upbit, coin_symbol):
-		return upbit.fetch_currency_by_id(coin_symbol)['info']['currency']['withdraw_fee']
-	
-	@classmethod
-	def create_market_buy_order(cls, upbit, coin_symbol, coin_count):
-		coin_price = cls.fetch_coin_price(upbit, coin_symbol)
+		jwt_token = jwt.encode(payload, self._secret_key)
+		authorize_token = 'Bearer {}'.format(jwt_token)
+		headers = {"Authorization": authorize_token}
 		
-		# Can't use ccxt.create_market_buy_order: Upbit's market buy order amount is determined by krw, not coins.
-		upbit.create_market_order(Upbit.get_coin_id(coin_symbol), 'buy', coin_count, coin_price)
+		res = requests.get(url, headers=headers)
+		
+		return res.json()
 	
-	@classmethod
-	def create_market_sell_order(cls, upbit, coin_symbol, coin_count):
-		upbit.create_market_order(Upbit.get_coin_id(coin_symbol), 'sell', coin_count)
+	def fetch_balance(self, symbol):
+		balance = self._fetch_balance()
+		
+		for arg in balance:
+			if arg['currency'] == symbol:
+				return float(arg['balance'])
+			
+		return None
+	
+	def _get_withdraws_chance(self, currency):
+		url = 'https://api.upbit.com/v1/withdraws/chance'
+		query = {
+			'currency': currency,
+		}
+		query_string = urlencode(query).encode()
+		
+		m = hashlib.sha512()
+		m.update(query_string)
+		query_hash = m.hexdigest()
+		
+		payload = {
+			'access_key': self._api_key,
+			'nonce': str(uuid.uuid4()),
+			'query_hash': query_hash,
+			'query_hash_alg': 'SHA512',
+		}
+		
+		jwt_token = jwt.encode(payload, self._secret_key)
+		authorize_token = 'Bearer {}'.format(jwt_token)
+		headers = {"Authorization": authorize_token}
+		
+		res = requests.get(url, params=query, headers=headers)
+		
+		return res.json()
+		
+	def is_wallet_withdrawable(self, symbol, amount=0.0):
+		res = self._get_withdraws_chance(symbol)
+		is_working = res['currency']['wallet_state'] == 'working'
+		is_withdrawable = 'withdraw' in res['currency']['wallet_support']
+		remaining_daily = float(res['withdraw_limit']['remaining_daily'])
+		can_withdraw = res['withdraw_limit']['can_withdraw']
+		
+		return is_working and is_withdrawable and amount <= remaining_daily and can_withdraw
+		
+	def is_wallet_depositable(self, symbol):
+		res = self._get_withdraws_chance(symbol)
+		is_working = res['currency']['wallet_state'] == 'working'
+		is_depositable = 'deposit' in res['currency']['wallet_support']
+		
+		return is_working and is_depositable
+	
+	def fetch_withdraw_fee(self, symbol):
+		res = self._get_withdraws_chance(symbol)
+		
+		return float(res['currency']['withdraw_fee'])
+	
+	def _fetch_withdraw_info(self, symbol):
+		url = "https://api.upbit.com/v1/withdraws/chance"
+		query = {
+			'currency': symbol,
+		}
+		query_string = urlencode(query).encode()
+		
+		m = hashlib.sha512()
+		m.update(query_string)
+		query_hash = m.hexdigest()
+		
+		payload = {
+			'access_key': self._api_key,
+			'nonce': str(uuid.uuid4()),
+			'query_hash': query_hash,
+			'query_hash_alg': 'SHA512',
+		}
+		
+		jwt_token = jwt.encode(payload, self._secret_key)
+		authorize_token = 'Bearer {}'.format(jwt_token)
+		headers = {"Authorization": authorize_token}
+		
+		res = requests.get(url, params=query, headers=headers)
+		
+		return res.json()
+	
+	def _post_withdraws_coin(self, currency, amount, address, secondary_address, transaction_type):
+		url = 'https://api.upbit.com/v1/withdraws/coin'
+		query = {
+			'currency': currency,
+			'amount': amount,
+			'address': address,
+			'secondary_address': secondary_address,
+			'transaction_type': transaction_type,
+		}
+		query_string = urlencode(query).encode()
+		
+		m = hashlib.sha512()
+		m.update(query_string)
+		query_hash = m.hexdigest()
+		
+		payload = {
+			'access_key': self._api_key,
+			'nonce': str(uuid.uuid4()),
+			'query_hash': query_hash,
+			'query_hash_alg': 'SHA512',
+		}
+		
+		jwt_token = jwt.encode(payload, self._secret_key)
+		authorize_token = 'Bearer {}'.format(jwt_token)
+		headers = {"Authorization": authorize_token}
+		
+		res = requests.post(url, params=query, headers=headers)
+		
+		return res.json()
+	
+	def withdraw(self, symbol, to_addr, to_tag, amount, chain=None):
+		res = self._post_withdraws_coin(symbol, amount, to_addr, to_tag, 'default')
+		
+		return res['uuid']
+	
+	def _get_withdraw(self, uuid_, txid, currency):
+		url = 'https://api.upbit.com/v1/withdraw'
+		query = {
+			'uuid': uuid_,
+			'txid': txid,
+			'currency': currency,
+		}
+		query_string = urlencode(query).encode()
+		
+		m = hashlib.sha512()
+		m.update(query_string)
+		query_hash = m.hexdigest()
+		
+		payload = {
+			'access_key': self._api_key,
+			'nonce': str(uuid.uuid4()),
+			'query_hash': query_hash,
+			'query_hash_alg': 'SHA512',
+		}
+		
+		jwt_token = jwt.encode(payload, self._secret_key)
+		authorize_token = 'Bearer {}'.format(jwt_token)
+		headers = {"Authorization": authorize_token}
+		
+		res = requests.get(url, params=query, headers=headers)
+		
+		return res.json()
+	
+	def wait_withdraw(self, uuid):
+		withdraw_response = self._get_withdraw(uuid, None, None)
+		
+		start_time_s = time.time()
+		term_s = 1
+		while True:
+			if time.time() - start_time_s < term_s:
+				continue
+			
+			if withdraw_response['state'] == 'done':
+				return True
+			elif withdraw_response['state'] in ['rejected', 'canceled']:
+				return False
+			
+			withdraw_response = self._get_withdraw(uuid, None, None)
+			start_time_s = time.time()
+		
+		return False
+	
+	def fetch_txid(self, uuid):
+		res = self._get_withdraw(uuid, None, None)
+		
+		return res['txid']
+	
+	def _get_deposit(self, uuid_, txid, currency):
+		url = 'https://api.upbit.com/v1/deposit'
+		query = {
+			'uuid': uuid_,
+			'txid': txid,
+			'currency': currency
+		}
+		query_string = urlencode(query).encode()
+		
+		m = hashlib.sha512()
+		m.update(query_string)
+		query_hash = m.hexdigest()
+		
+		payload = {
+			'access_key': self._api_key,
+			'nonce': str(uuid.uuid4()),
+			'query_hash': query_hash,
+			'query_hash_alg': 'SHA512',
+		}
+		
+		jwt_token = jwt.encode(payload, self._secret_key)
+		authorize_token = 'Bearer {}'.format(jwt_token)
+		headers = {"Authorization": authorize_token}
+		
+		res = requests.get(url, params=query, headers=headers)
+		
+		return res.json()
+	
+	def wait_deposit(self, txid):
+		deposit_response = self._get_deposit(None, txid, None)
+		
+		start_time_s = time.time()
+		term_s = 1
+		while True:
+			if time.time() - start_time_s < term_s:
+				continue
+			
+			if deposit_response['state'] == 'accepted':
+				return True
+			elif deposit_response['state'] in ['rejected']:
+				return False
+			
+			deposit_response = self._get_deposit(None, txid, None)
+			start_time_s = time.time()
+		
+		return False
+	
+	def _post_orders(self, symbol, market, side, volume, price, ord_type):
+		url = 'https://api.upbit.com/v1/orders'
+		query = {
+			'market': self.to_market_code(symbol, market),
+			'side': side,
+			'volume': volume,
+			'price': price,
+			'ord_type': ord_type,
+		}
+		
+		query_string = urlencode(query).encode()
+		
+		m = hashlib.sha512()
+		m.update(query_string)
+		query_hash = m.hexdigest()
+		
+		payload = {
+			'access_key': self._api_key,
+			'nonce': str(uuid.uuid4()),
+			'query_hash': query_hash,
+			'query_hash_alg': 'SHA512',
+		}
+		
+		jwt_token = jwt.encode(payload, self._secret_key)
+		authorize_token = 'Bearer {}'.format(jwt_token)
+		headers = {"Authorization": authorize_token}
+		
+		res = requests.post(url, params=query, headers=headers)
+		
+		return res.json()
+
+	def create_market_buy_order(self, symbol, market, price):
+		return self._post_orders(symbol, market, 'bid', None, price, 'market')
+	
+	def create_market_sell_order(self, symbol, market, volume):
+		return self._post_orders(symbol, market, 'ask', volume, None, 'market')
+	
+	def _get_order(self, uuid_):
+		url = 'https://api.upbit.com/v1/order'
+		query = {
+			'uuid': uuid_,
+		}
+		query_string = urlencode(query).encode()
+		
+		m = hashlib.sha512()
+		m.update(query_string)
+		query_hash = m.hexdigest()
+		
+		payload = {
+			'access_key': self._api_key,
+			'nonce': str(uuid.uuid4()),
+			'query_hash': query_hash,
+			'query_hash_alg': 'SHA512',
+		}
+		
+		jwt_token = jwt.encode(payload, self._secret_key)
+		authorize_token = 'Bearer {}'.format(jwt_token)
+		headers = {"Authorization": authorize_token}
+		
+		res = requests.get(url, params=query, headers=headers)
+		
+		# https://docs.upbit.com/changelog/%EC%95%88%EB%82%B4-open-api-%EC%9E%90%EC%A3%BC%ED%95%98%EB%8A%94-%EB%AC%B8%EC%9D%98%EC%82%AC%ED%95%AD-%EC%8B%9C%EC%9E%A5%EA%B0%80-%EC%A3%BC%EB%AC%B8-%EA%B4%80%EB%A0%A8
+		# 'state' can be 'wait', 'done', 'cancel'
+		# 'cancel' can be shown in completed order, because there can remain dusts of krw.
+		return res.json()
+	
+	def wait_order(self, uuid):
+		order_response = self._get_order(uuid)
+		
+		start_time_s = time.time()
+		term_s = 1
+		while True:
+			if time.time() - start_time_s < term_s:
+				continue
+			
+			if order_response['state'] in ['done', 'cancel']:
+				break
+				
+			order_response = self._get_order(uuid)
+			start_time_s = time.time()
+		
+		if order_response['state'] == 'done':
+			return True
+		elif order_response['state'] == 'cancel':
+			if float(order_response['remaining_volume']) < 0.00000001:
+				return True
+			
+		return False
+
+	def _delete_order(self, uuid_):
+		url = 'https://api.upbit.com/v1/order'
+		query = {
+			'uuid': uuid_,
+		}
+		query_string = urlencode(query).encode()
+		
+		m = hashlib.sha512()
+		m.update(query_string)
+		query_hash = m.hexdigest()
+		
+		payload = {
+			'access_key': self._api_key(),
+			'nonce': str(uuid.uuid4()),
+			'query_hash': query_hash,
+			'query_hash_alg': 'SHA512',
+		}
+		
+		jwt_token = jwt.encode(payload, self._secret_key())
+		authorize_token = 'Bearer {}'.format(jwt_token)
+		headers = {"Authorization": authorize_token}
+		
+		res = requests.delete(url, params=query, headers=headers)
+		
+		return res.json()
+	
+	def cancel_order(self, uuid):
+		return self._delete_order(uuid)
+
+	def valid_price(self, price):
+		def ceil(val, unit):
+			return int(val / unit) * unit
+		if 2000000 <= price:
+			return ceil(price, 1000)
+		elif 1000000 <= price:
+			return ceil(price, 500)
+		elif 500000 <= price:
+			return ceil(price, 100)
+		elif 100000 <= price:
+			return ceil(price, 50)
+		elif 10000 <= price:
+			return ceil(price, 10)
+		elif 1000 <= price:
+			return ceil(price, 5)
+		elif 100 <= price:
+			return ceil(price, 1)
+		elif 10 <= price:
+			return ceil(price, 0.1)
+		elif 0 <= price:
+			return ceil(price, 0.01)

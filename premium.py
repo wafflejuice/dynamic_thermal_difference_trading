@@ -1,4 +1,5 @@
-from exchange import Upbit, Binance, Futures
+from exchange.binance import Binance, Futures
+from exchange.upbit import Upbit
 import currency
 
 class Kimp:

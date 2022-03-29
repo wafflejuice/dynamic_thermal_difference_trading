@@ -1,7 +1,9 @@
 import ccxt
 import time
 
-from exchange import Exchange, Upbit, Binance, Futures
+from exchange.base_exchange import BaseExchange
+from exchange.binance import Binance, Futures
+from exchange.upbit import Upbit
 import transaction
 from premium import Kimp
 from premium import Futp
@@ -11,10 +13,22 @@ import logger
 
 
 def trading_logic(upbit, binance, futures):
-	coin_symbols = Exchange.coin_symbols_intersection(upbit, binance, futures)
+	config = Config.load_config()
+	upbit_exclusion_symbols = config['upbit']['exclusion']
+	binance_exclusion_symbols = config['binance']['exclusion']
 	
-	#for coin_symbol in coin_symbols:
-	#	Futures.adjust_leverage(futures, coin_symbol, 5)
+	coin_symbols = BaseExchange.coin_symbols_intersection(upbit, binance, futures)
+	
+	for symbol in upbit_exclusion_symbols:
+		coin_symbols.discard(symbol)
+	for symbol in binance_exclusion_symbols:
+		coin_symbols.discard(symbol)
+		
+	coin_symbols = sorted(list(coin_symbols))
+	
+	for coin_symbol in coin_symbols:
+		Futures.adjust_leverage(futures, coin_symbol, 5)
+	
 	
 	previous_stage = 3 # 0.0%
 	buffer_margin_ratio = 0.05  # 5%
@@ -29,7 +43,7 @@ def trading_logic(upbit, binance, futures):
 			logger.logger.info('balance : upbit = {}KRW, binance = {}USDT, futures = {}USDT'.format(Upbit.fetch_balance(upbit), Binance.fetch_balance(binance), Futures.fetch_balance(futures)))
 			logger.logger.info('previous stage = {}'.format(previous_stage))
 			
-			kimp_list_ascending = Kimp.calculate_kimps(upbit, binance, coin_symbols, False)
+			kimp_list_ascending = Kimp.calculate_premiums(upbit, binance, coin_symbols, 'krw', 'usd')
 			
 			logger.logger.info('kimp list : {}'.format(kimp_list_ascending))
 			
@@ -88,7 +102,7 @@ def trading_logic(upbit, binance, futures):
 					binance_coin_price_usdt = Binance.fetch_coin_price(binance, coin_symbol_to_transfer)
 					
 					coin_amount_to_transfer = binance_balance_with_margin_usdt / binance_coin_price_usdt
-					safe_coin_amount_to_transfer = Exchange.safe_coin_amount(upbit, binance, futures, coin_symbol_to_transfer, coin_amount_to_transfer)
+					safe_coin_amount_to_transfer = BaseExchange.safe_coin_amount(upbit, binance, futures, coin_symbol_to_transfer, coin_amount_to_transfer)
 					
 					transaction.send_coin_binance_to_upbit_prefect_hedge(upbit, binance, futures, coin_symbol_to_transfer, safe_coin_amount_to_transfer)
 				
@@ -106,7 +120,7 @@ def trading_logic(upbit, binance, futures):
 					upbit_coin_price_krw = Upbit.fetch_coin_price(upbit, coin_symbol_to_transfer)
 					
 					coin_amount_to_transfer = upbit_balance_with_margin_krw / upbit_coin_price_krw
-					safe_coin_amount_to_transfer = Exchange.safe_coin_amount(upbit, binance, futures, coin_symbol_to_transfer, coin_amount_to_transfer)
+					safe_coin_amount_to_transfer = BaseExchange.safe_coin_amount(upbit, binance, futures, coin_symbol_to_transfer, coin_amount_to_transfer)
 					
 					transaction.send_coin_upbit_to_binance_perfect_hedge(upbit, binance, futures, coin_symbol_to_transfer, safe_coin_amount_to_transfer)
 				

@@ -1,6 +1,8 @@
 import time
 
-from exchange import Exchange, Upbit, Binance, Futures
+from exchange.base_exchange import BaseExchange
+from exchange.binance import Binance, Futures
+from exchange.upbit import Upbit
 from telegram import Telegram
 from config import Config
 import logger
@@ -26,7 +28,7 @@ def send_upbit_to_binance(upbit, binance, coin_symbol, amount):
 	# Get Transaction id by withdraw id
 	while True:
 		# history is chronological sequence
-		upbit_withdraw_history = upbit.fetch_withdrawals(coin_symbol, upbit_server_time - Exchange.EPOCH_TIME_TWO_HOUR_MS, None)
+		upbit_withdraw_history = upbit.fetch_withdrawals(coin_symbol, upbit_server_time - BaseExchange.EPOCH_TIME_TWO_HOUR_MS, None)
 		
 		# if withdraw history is not empty
 		if upbit_withdraw_history:
@@ -43,7 +45,7 @@ def send_upbit_to_binance(upbit, binance, coin_symbol, amount):
 		# history is chronological sequence
 		# Don't know when binance gets submission. So start_time must cover long range.
 		# Assumption: A transaction time is under 1 hour
-		binance_deposit_history = binance.fetch_deposits(coin_symbol, binance_server_time - Exchange.EPOCH_TIME_TWO_HOUR_MS, None)
+		binance_deposit_history = binance.fetch_deposits(coin_symbol, binance_server_time - BaseExchange.EPOCH_TIME_TWO_HOUR_MS, None)
 		
 		# if deposit history is not empty
 		if binance_deposit_history:
@@ -79,7 +81,7 @@ def send_binance_to_upbit(upbit, binance, coin_symbol, amount):
 	# Get Transaction id by withdraw id
 	while True:
 		# history is chronological sequence
-		binance_withdraw_history = binance.fetch_withdrawals(coin_symbol, binance_server_time - Exchange.EPOCH_TIME_TWO_HOUR_MS, None)
+		binance_withdraw_history = binance.fetch_withdrawals(coin_symbol, binance_server_time - BaseExchange.EPOCH_TIME_TWO_HOUR_MS, None)
 		
 		# if withdraw history is not empty
 		if binance_withdraw_history:
@@ -96,7 +98,7 @@ def send_binance_to_upbit(upbit, binance, coin_symbol, amount):
 		# history is chronological sequence
 		# Don't know when upbit gets submission. So start_time must cover long range.
 		# Assumption: A transaction time is under 1 hour
-		upbit_deposit_history = upbit.fetch_deposits(coin_symbol, upbit_server_time - Exchange.EPOCH_TIME_TWO_HOUR_MS, None)
+		upbit_deposit_history = upbit.fetch_deposits(coin_symbol, upbit_server_time - BaseExchange.EPOCH_TIME_TWO_HOUR_MS, None)
 		
 		# if deposit history is not empty
 		if upbit_deposit_history:
@@ -116,7 +118,7 @@ def internal_transfer_usdt(binance, amount_usdt, direction_type):
 	start_time = Binance.fetch_server_time(binance)
 	
 	transaction = binance.sapi_post_futures_transfer({
-		'asset': Exchange.USDT_SYMBOL,
+		'asset': BaseExchange.USDT_SYMBOL,
 		'amount': amount_usdt,
 		'type': direction_type,
 	})
@@ -124,9 +126,9 @@ def internal_transfer_usdt(binance, amount_usdt, direction_type):
 	# Check if transaction is finished
 	while True:
 		futures_transaction_history = binance.sapi_get_futures_transfer({
-			'startTime': start_time - Exchange.EPOCH_TIME_TWO_HOUR_MS,  # Because timestamp is floor(serverTime) by second, subtract 1 hour
+			'startTime': start_time - BaseExchange.EPOCH_TIME_TWO_HOUR_MS,  # Because timestamp is floor(serverTime) by second, subtract 1 hour
 			'current': 1,
-			'asset': Exchange.USDT_SYMBOL,
+			'asset': BaseExchange.USDT_SYMBOL,
 		})
 		
 		# Check tranId & status
@@ -177,7 +179,7 @@ def send_coin_upbit_to_binance_perfect_hedge(upbit, binance, futures, coin_symbo
 		Futures.market_long(futures, coin_symbol, coin_count, True)
 		
 		logger.logger.info(time.strftime('%c', time.localtime(time.time())) + ' : send upbit to binance perfect hedge complete')
-		Exchange.telegram_me_balance(upbit, binance, futures)
+		BaseExchange.telegram_me_balance(upbit, binance, futures)
 		
 	except Exception as e:
 		Telegram.send_message(e)
@@ -197,7 +199,7 @@ def send_coin_binance_to_upbit_prefect_hedge(upbit, binance, futures, coin_symbo
 		
 		# binance taker fee
 		bought_coin_count = coin_count * (1.0 - Binance.TAKER_FEE)
-		coin_count = Exchange.safe_coin_amount(upbit, binance, futures, coin_symbol, bought_coin_count)
+		coin_count = BaseExchange.safe_coin_amount(upbit, binance, futures, coin_symbol, bought_coin_count)
 		
 		logger.logger.info('binance coin estimate : {}'.format(coin_count))
 		logger.logger.info('binance coin fetch : {}'.format(Binance.fetch_coin_count(binance, coin_symbol)))
@@ -220,7 +222,7 @@ def send_coin_binance_to_upbit_prefect_hedge(upbit, binance, futures, coin_symbo
 		Futures.market_long(futures, coin_symbol, coin_count, True)
 
 		logger.logger.info(time.strftime('%c', time.localtime(time.time())) + ' : send binance to upbit perfect hedge complete')
-		Exchange.telegram_me_balance(upbit, binance, futures)
+		BaseExchange.telegram_me_balance(upbit, binance, futures)
 
 	except Exception as e:
 		Telegram.send_message(e)

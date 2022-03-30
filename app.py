@@ -135,8 +135,15 @@ def trading_logic(upbit, binance, futures):
 			return
 			
 def run():
-	run_test_scenarios()
-
-def run_test_scenarios():
-	upbit.test_scenario()
-	# binance.test_scenario()
+	symbol = 'KAVA'
+	market = 'KRW'
+	
+	# upbit.basic_tests(symbol, market)
+	# binance.basic_tests('BTC', 'USDT')
+	# upbit.deposit_txid_case('0x89577d5e58936e003bfcb82f75c49ed25596e2151e20527bbc555e5f4359092e')
+	# binance.deposit_txid_case('34C272976A54D73AACDCB4C4993C83B69AB79705C43018FBB2431D1B0B696E4D')
+	# upbit.test_scenario(symbol, market)
+	# binance.test_scenario(symbol, market)
+	
+	binance.market_sell('KAVA', 'USDT', 107.78905100)
+	

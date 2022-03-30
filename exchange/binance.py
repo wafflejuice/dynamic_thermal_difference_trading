@@ -1,5 +1,6 @@
 from exchange.base_exchange import BaseExchange
 from binance.spot import Spot
+import time
 
 
 class Binance(BaseExchange):
@@ -13,50 +14,228 @@ class Binance(BaseExchange):
 		
 	
 	def to_market_code(self, symbol, market):
-		pass
+		return symbol+market
 	
 	def to_symbol(self, market_code):
 		pass
 	
 	def fetch_server_timestamp(self):
-		return self.time()
+		return int(self._client.time()['serverTime'])
 	
 	def fetch_symbols(self):
+		# return self._client.ticker_price()
 		pass
 	
 	def fetch_price(self, symbol, market):
-		pass
+		market_code = self.to_market_code(symbol, market)
+		return float(self._client.ticker_price(market_code)['price'])
 	
 	def fetch_balance(self, symbol):
-		pass
+		all_coins_info = self._client.coin_info()
+		
+		# print(all_coins_info)
+		
+		for coin_info in all_coins_info:
+			if coin_info['coin'] == symbol:
+				return coin_info['free']
+		
+		return None
 	
-	def is_wallet_withdrawable(self, symbol, amount=0.0):
-		pass
+	def is_wallet_withdrawable(self, symbol, network):
+		all_coins_info = self._client.coin_info()
+		
+		for coin_info in all_coins_info:
+			if coin_info['coin'] == symbol:
+				for network_info in coin_info['networkList']:
+					if network_info['network'] == network:
+						return network_info['withdrawEnable']
+					print('Such network is not supported for the symbol')
+					return False
+			print('Such symbol does not exist')
+			return False
+		return False
 	
-	def is_wallet_depositable(self, symbol):
-		pass
+	def is_wallet_depositable(self, symbol, network):
+		all_coins_info = self._client.coin_info()
+		
+		for coin_info in all_coins_info:
+			if coin_info['coin'] == symbol:
+				for network_info in coin_info['networkList']:
+					if network_info['network'] == network:
+						return network_info['depositEnable']
+					print('Such network is not supported for the symbol')
+					return False
+			print('Such symbol does not exist')
+			return False
+		return False
 	
-	def fetch_withdraw_fee(self, symbol):
-		pass
+	def fetch_withdraw_fee(self, symbol, network):
+		all_coins_info = self._client.coin_info()
+		
+		for coin_info in all_coins_info:
+			if coin_info['coin'] == symbol:
+				for network_info in coin_info['networkList']:
+					if network_info['network'] == network:
+						return network_info['withdrawFee']
+					print('Such network is not supported for the symbol')
+					return False
+			print('Such symbol does not exist')
+			return False
+		return False
 	
-	def withdraw(self, symbol, to_addr, to_tag, amount, chain=None):
-		pass
+	def withdraw(self, symbol, to_addr, to_tag, amount, network=None):
+		return self._client.withdraw(symbol, amount, to_addr, addressTag=to_tag, network=network)
 	
-	def wait_withdraw(self, uuid):
-		pass
+	def wait_withdraw(self, id_):
+		withdraw_history = self._client.withdraw_history()
+		
+		start_time_s = time.time()
+		term_s = 1
+		
+		while True:
+			if time.time() - start_time_s < term_s:
+				continue
+			
+			for withdraw in withdraw_history:
+				if withdraw['id'] == id_:
+					# 0:Email Sent, 1:Cancelled, 2:Awaiting Approval, 3:Rejected, 4:Processing, 5:Failure, 6:Completed
+					if withdraw['status'] == 6:
+						return True
+					elif withdraw['status'] in [1, 3, 5]:
+						return False
+					break
+			
+			withdraw_history = self._client.withdraw_history()
+			start_time_s = time.time()
+		
+		return False
 	
-	def fetch_txid(self, uuid):
-		pass
+	def fetch_txid(self, id_):
+		withdraw_history = self._client.withdraw_history()
+		
+		start_time_s = time.time()
+		term_s = 1
+		
+		while True:
+			if time.time() - start_time_s < term_s:
+				continue
+			
+			for withdraw in withdraw_history:
+				if withdraw['id'] == id_:
+					if withdraw['txid'] is not None:
+						return withdraw['txid']
+					break
+			
+			withdraw_history = self._client.withdraw_history()
+			start_time_s = time.time()
+		
+		return None
 	
 	def wait_deposit(self, txid):
-		pass
-	
+		deposit_history = self._client.deposit_history()
+		
+		start_time_s = time.time()
+		term_s = 1
+		
+		while True:
+			if time.time() - start_time_s < term_s:
+				continue
+			
+			for deposit in deposit_history:
+				if deposit['txId'].lower() == txid.lower():
+					# 0:pending, 6:credited but cannot withdraw, 1:success
+					if deposit['status'] in [1, 6]:
+						return True
+					break
+			
+			deposit_history = self._client.deposit_history()
+			start_time_s = time.time()
+		
+		return None
+		
 	def create_market_buy_order(self, symbol, market, price):
-		pass
+		order = self._client.new_order(self.to_market_code(symbol, market), 'BUY', 'MARKET', quoteOrderQty=price)
+		
+		return order['clientOrderId']
 	
 	def create_market_sell_order(self, symbol, market, volume):
-		pass
+		volume = self.quantity_filter(volume, True)
+		order = self._client.new_order(self.to_market_code(symbol, market), 'SELL', 'MARKET', quantity=volume)
+		
+		return order['clientOrderId']
 
+	def order_executed_volume(self, symbol, id_):
+		order = self._client.get_order(symbol, origClientOrderId=id_)
+		executed_volume = float(order['executedQty'])
+		
+		return executed_volume
+
+	def is_order_fully_executed(self, symbol, id_):
+		order = self._client.get_order(symbol, origClientOrderId=id_)
+		# ACTIVE, CANCELLED, FILLED
+		if order['status'] == 'FILLED':
+			return True
+		
+		return False
+	
+	def wait_order(self, symbol, id_):
+		order = self._client.get_order(symbol, origClientOrderId=id_)
+		
+		start_time_s = time.time()
+		term_s = 1
+		
+		while True:
+			if time.time() - start_time_s < term_s:
+				continue
+				
+			if order['status'] == 'FILLED':
+				return True
+			elif order['status'] == 'CANCELLED':
+				return False
+			
+			order = self._client.get_order(symbol, origClientOrderId=id_)
+			start_time_s = time.time()
+		
+		return False
+	
+	def cancel_order(self, symbol, id_):
+		self._client.cancel_order(symbol, origClientOrderId=id_)
+
+	def price_filter(self, price):
+		min_price = 0.00000100
+		max_price = 100000.00000000
+		tick_size = 0.00000100
+		
+		price = max(min_price, price)
+		price = min(price, max_price)
+		price = int(price / tick_size) * tick_size
+		# price = '{:.6f}'.format(price)
+		
+		return price
+	
+	def quantity_filter(self, quantity, is_market=False):
+		# MARKET_LOT_SIZE
+		if is_market:
+			minQty = 0.00100000
+			maxQty = 100000.00000000
+			step_size = 0.00100000
+		
+			quantity = max(minQty, quantity)
+			quantity = min(quantity, maxQty)
+			quantity = int(quantity / step_size) * step_size
+			# quantity = '{:.3f}'.format(quantity)
+		# LOT_SIZE
+		else:
+			minQty = 0.00100000
+			maxQty = 100000.00000000
+			step_size = 0.00100000
+			
+			quantity = max(minQty, quantity)
+			quantity = min(quantity, maxQty)
+			quantity = int(quantity / step_size) * step_size
+			# quantity = '{:.3f}'.format(quantity)
+		
+		return quantity
 
 class Futures(BaseExchange):
 	TAKER_FEE = 0.0004

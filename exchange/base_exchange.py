@@ -37,27 +37,27 @@ class BaseExchange:
 		pass
 	
 	@abc.abstractmethod
-	def is_wallet_withdrawable(self, symbol, amount=0.0):
+	def is_wallet_withdrawable(self, symbol, network):
 		pass
 
 	@abc.abstractmethod
-	def is_wallet_depositable(self, symbol):
+	def is_wallet_depositable(self, symbol, network):
 		pass
 
 	@abc.abstractmethod
-	def fetch_withdraw_fee(self, symbol):
+	def fetch_withdraw_fee(self, symbol, network):
 		pass
 	
 	@abc.abstractmethod
-	def withdraw(self, symbol, to_addr, to_tag, amount, chain=None):
+	def withdraw(self, symbol, to_addr, to_tag, amount, network):
 		pass
 
 	@abc.abstractmethod
-	def wait_withdraw(self, uuid):
+	def wait_withdraw(self, id_):
 		pass
 
 	@abc.abstractmethod
-	def fetch_txid(self, uuid):
+	def fetch_txid(self, id_):
 		pass
 	
 	@abc.abstractmethod
@@ -70,6 +70,22 @@ class BaseExchange:
 	
 	@abc.abstractmethod
 	def create_market_sell_order(self, symbol, market, volume):
+		pass
+	
+	@abc.abstractmethod
+	def order_executed_volume(self, symbol, id_):
+		pass
+	
+	@abc.abstractmethod
+	def is_order_fully_executed(self, symbol, id_):
+		pass
+	
+	@abc.abstractmethod
+	def wait_order(self, symbol, id_):
+		pass
+	
+	@abc.abstractmethod
+	def cancel_order(self, symbol, id_):
 		pass
 
 class ExchangeHelper:

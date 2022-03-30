@@ -100,23 +100,24 @@ class Upbit(BaseExchange):
 		
 		return res.json()
 		
-	def is_wallet_withdrawable(self, symbol, amount=0.0):
+	def is_wallet_withdrawable(self, symbol, network=None):
 		res = self._get_withdraws_chance(symbol)
 		is_working = res['currency']['wallet_state'] == 'working'
 		is_withdrawable = 'withdraw' in res['currency']['wallet_support']
-		remaining_daily = float(res['withdraw_limit']['remaining_daily'])
+		# remaining_daily = float(res['withdraw_limit']['remaining_daily'])
 		can_withdraw = res['withdraw_limit']['can_withdraw']
 		
-		return is_working and is_withdrawable and amount <= remaining_daily and can_withdraw
+		# return is_working and is_withdrawable and amount <= remaining_daily and can_withdraw
+		return is_working and is_withdrawable and can_withdraw
 		
-	def is_wallet_depositable(self, symbol):
+	def is_wallet_depositable(self, symbol, network=None):
 		res = self._get_withdraws_chance(symbol)
 		is_working = res['currency']['wallet_state'] == 'working'
 		is_depositable = 'deposit' in res['currency']['wallet_support']
 		
 		return is_working and is_depositable
 	
-	def fetch_withdraw_fee(self, symbol):
+	def fetch_withdraw_fee(self, symbol, network=None):
 		res = self._get_withdraws_chance(symbol)
 		
 		return float(res['currency']['withdraw_fee'])
@@ -180,12 +181,12 @@ class Upbit(BaseExchange):
 		
 		return res.json()
 	
-	def withdraw(self, symbol, to_addr, to_tag, amount, chain=None):
-		# upbit allows upto 6 decimal point at withdrawal amount.
-		amount = int(amount * 1000000) / 1000000
-		print(amount)
+	def withdraw(self, symbol, to_addr, to_tag, amount, network=None):
+		amount -= self.fetch_withdraw_fee(symbol)
+		amount = self.quantity_filter(amount)
+		
 		res = self._post_withdraws_coin(symbol, amount, to_addr, to_tag, 'default')
-		print(res)
+		
 		return res['uuid']
 	
 	def _get_withdraw(self, uuid_, txid, currency):
@@ -223,8 +224,8 @@ class Upbit(BaseExchange):
 		
 		return res.json()
 	
-	def wait_withdraw(self, uuid):
-		withdraw_response = self._get_withdraw(uuid, None, None)
+	def wait_withdraw(self, id_):
+		withdraw_response = self._get_withdraw(id_, None, None)
 		print(withdraw_response)
 		start_time_s = time.time()
 		term_s = 1
@@ -232,18 +233,18 @@ class Upbit(BaseExchange):
 			if time.time() - start_time_s < term_s:
 				continue
 			
-			if withdraw_response['state'] == 'done':
+			if withdraw_response['state'].lower() == 'done':
 				return True
-			elif withdraw_response['state'] in ['rejected', 'canceled']:
+			elif withdraw_response['state'].lower() in ['rejected', 'canceled']:
 				return False
 			
-			withdraw_response = self._get_withdraw(uuid, None, None)
+			withdraw_response = self._get_withdraw(id_, None, None)
 			start_time_s = time.time()
 		
 		return False
 	
-	def fetch_txid(self, uuid):
-		res = self._get_withdraw(uuid, None, None)
+	def fetch_txid(self, id_):
+		res = self._get_withdraw(id_, None, None)
 		
 		start_time_s = time.time()
 		term_s = 1
@@ -255,7 +256,7 @@ class Upbit(BaseExchange):
 			if res['txid'] is not None:
 				return res['txid']
 			
-			res = self._get_withdraw(uuid, None, None)
+			res = self._get_withdraw(id_, None, None)
 			start_time_s = time.time()
 		
 		return None
@@ -263,10 +264,18 @@ class Upbit(BaseExchange):
 	def _get_deposit(self, uuid_, txid, currency):
 		url = 'https://api.upbit.com/v1/deposit'
 		query = {
-			'uuid': uuid_,
-			'txid': txid,
-			'currency': currency
+			# 'uuid': uuid_,
+			# 'txid': txid,
+			# 'currency': currency
 		}
+		
+		if uuid_ is not None:
+			query['uuid'] = uuid_
+		if txid is not None:
+			query['txid'] = txid
+		if currency is not None:
+			query['currency'] = currency
+			
 		query_string = urlencode(query).encode()
 		
 		m = hashlib.sha512()
@@ -290,16 +299,16 @@ class Upbit(BaseExchange):
 	
 	def wait_deposit(self, txid):
 		deposit_response = self._get_deposit(None, txid, None)
-		
+		print(deposit_response)
 		start_time_s = time.time()
 		term_s = 1
 		while True:
 			if time.time() - start_time_s < term_s:
 				continue
 			
-			if deposit_response['state'] == 'accepted':
+			if deposit_response['state'].lower() == 'accepted':
 				return True
-			elif deposit_response['state'] in ['rejected']:
+			elif deposit_response['state'].lower() in ['rejected']:
 				return False
 			
 			deposit_response = self._get_deposit(None, txid, None)
@@ -321,8 +330,6 @@ class Upbit(BaseExchange):
 			query['volume'] = volume
 		if price is not None:
 			query['price'] = price
-			
-		print(query)
 		
 		query_string = urlencode(query).encode()
 		
@@ -360,6 +367,7 @@ class Upbit(BaseExchange):
 		query = {
 			'uuid': uuid_,
 		}
+		
 		query_string = urlencode(query).encode()
 		
 		m = hashlib.sha512()
@@ -384,13 +392,24 @@ class Upbit(BaseExchange):
 		# 'cancel' can be shown in completed order, because there can remain dusts of krw.
 		return res.json()
 	
-	def order_executed(self, uuid):
-		res = self._get_order(uuid)
+	def order_executed_volume(self, symbol, id_):
+		res = self._get_order(id_)
 		
 		return float(res['executed_volume'])
 	
-	def wait_order(self, uuid):
-		order_response = self._get_order(uuid)
+	def is_order_fully_executed(self, symbol, id_):
+		order_response = self._get_order(id_)
+		
+		if order_response['state'].lower() == 'done':
+			return True
+		elif order_response['state'].lower() == 'cancel':
+			# Can't determine whether it's valid by remaining_volume,
+			# because market-buy has no volume!!
+			if order_response['ord_type'] == 'price' and float(order_response['executed_volume']) > 0:
+				return True
+	
+	def wait_order(self, symbol, id_):
+		order_response = self._get_order(id_)
 		
 		start_time_s = time.time()
 		term_s = 1
@@ -398,27 +417,17 @@ class Upbit(BaseExchange):
 			if time.time() - start_time_s < term_s:
 				continue
 			
-			if order_response['state'] in ['done', 'cancel']:
-				break
+			if order_response['state'].lower() == 'done':
+				return True
+			elif order_response['state'].lower() == 'cancel':
+				if self.is_order_fully_executed(symbol, id_):
+					return True
+				return False
 				
-			order_response = self._get_order(uuid)
+			order_response = self._get_order(id_)
 			start_time_s = time.time()
-			
-		if self.is_order_fully_executed(uuid):
-			return True
 		
 		return False
-	
-	def is_order_fully_executed(self, uuid):
-		order_response = self._get_order(uuid)
-		
-		if order_response['state'] == 'done':
-			return True
-		elif order_response['state'] == 'cancel':
-			# Can't determine whether it's valid by remaining_volume,
-			# because market-buy has no volume!!
-			if order_response['ord_type'] == 'price' and float(order_response['executed_volume']) > 0:
-				return True
 		
 	def _delete_order(self, uuid_):
 		url = 'https://api.upbit.com/v1/order'
@@ -446,10 +455,10 @@ class Upbit(BaseExchange):
 		
 		return res.json()
 	
-	def cancel_order(self, uuid):
-		return self._delete_order(uuid)
+	def cancel_order(self, symbol, id_):
+		return self._delete_order(id_)
 
-	def valid_price(self, price):
+	def price_filter(self, price):
 		def floor(val, unit):
 			return int(val / unit) * unit
 		
@@ -475,3 +484,9 @@ class Upbit(BaseExchange):
 			return floor(price, 0.001)
 		return floor(price, 0.0001)
 		
+	def quantity_filter(self, quantity):
+		step_size = 0.0000001
+		
+		quantity = int(quantity / step_size) * step_size
+		
+		return quantity

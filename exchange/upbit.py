@@ -183,7 +183,7 @@ class Upbit(BaseExchange):
 	
 	def withdraw(self, symbol, to_addr, to_tag, amount, network=None):
 		amount -= self.fetch_withdraw_fee(symbol)
-		amount = self.quantity_filter(amount)
+		amount = self.quantity_filter(None, None, amount, None)
 		
 		res = self._post_withdraws_coin(symbol, amount, to_addr, to_tag, 'default')
 		
@@ -392,12 +392,12 @@ class Upbit(BaseExchange):
 		# 'cancel' can be shown in completed order, because there can remain dusts of krw.
 		return res.json()
 	
-	def order_executed_volume(self, symbol, id_):
+	def order_executed_volume(self, symbol, market, id_):
 		res = self._get_order(id_)
 		
 		return float(res['executed_volume'])
 	
-	def is_order_fully_executed(self, symbol, id_):
+	def is_order_fully_executed(self, symbol, market, id_):
 		order_response = self._get_order(id_)
 		
 		if order_response['state'].lower() == 'done':
@@ -408,7 +408,7 @@ class Upbit(BaseExchange):
 			if order_response['ord_type'] == 'price' and float(order_response['executed_volume']) > 0:
 				return True
 	
-	def wait_order(self, symbol, id_):
+	def wait_order(self, symbol, market, id_):
 		order_response = self._get_order(id_)
 		
 		start_time_s = time.time()
@@ -420,7 +420,7 @@ class Upbit(BaseExchange):
 			if order_response['state'].lower() == 'done':
 				return True
 			elif order_response['state'].lower() == 'cancel':
-				if self.is_order_fully_executed(symbol, id_):
+				if self.is_order_fully_executed(symbol, market, id_):
 					return True
 				return False
 				
@@ -455,10 +455,10 @@ class Upbit(BaseExchange):
 		
 		return res.json()
 	
-	def cancel_order(self, symbol, id_):
+	def cancel_order(self, symbol, market, id_):
 		return self._delete_order(id_)
 
-	def price_filter(self, price):
+	def price_filter(self, symbol, market, price):
 		def floor(val, unit):
 			return int(val / unit) * unit
 		
@@ -484,7 +484,7 @@ class Upbit(BaseExchange):
 			return floor(price, 0.001)
 		return floor(price, 0.0001)
 		
-	def quantity_filter(self, quantity):
+	def quantity_filter(self, symbol, market, quantity, is_market=None):
 		step_size = 0.0000001
 		
 		quantity = int(quantity / step_size) * step_size

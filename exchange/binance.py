@@ -33,8 +33,6 @@ class Binance(BaseExchange):
 	def fetch_balance(self, symbol):
 		all_coins_info = self._client.coin_info()
 		
-		# print(all_coins_info)
-		
 		for coin_info in all_coins_info:
 			if coin_info['coin'] == symbol:
 				return coin_info['free']
@@ -154,32 +152,33 @@ class Binance(BaseExchange):
 		return None
 		
 	def create_market_buy_order(self, symbol, market, price):
+		price = self.price_filter(symbol, market, price)
 		order = self._client.new_order(self.to_market_code(symbol, market), 'BUY', 'MARKET', quoteOrderQty=price)
 		
 		return order['clientOrderId']
 	
 	def create_market_sell_order(self, symbol, market, volume):
-		volume = self.quantity_filter(volume, True)
+		volume = self.quantity_filter(symbol, market, volume, True)
 		order = self._client.new_order(self.to_market_code(symbol, market), 'SELL', 'MARKET', quantity=volume)
 		
 		return order['clientOrderId']
 
-	def order_executed_volume(self, symbol, id_):
-		order = self._client.get_order(symbol, origClientOrderId=id_)
+	def order_executed_volume(self, symbol, market, id_):
+		order = self._client.get_order(self.to_market_code(symbol, market), origClientOrderId=id_)
 		executed_volume = float(order['executedQty'])
 		
 		return executed_volume
 
-	def is_order_fully_executed(self, symbol, id_):
-		order = self._client.get_order(symbol, origClientOrderId=id_)
+	def is_order_fully_executed(self, symbol, market, id_):
+		order = self._client.get_order(self.to_market_code(symbol, market), origClientOrderId=id_)
 		# ACTIVE, CANCELLED, FILLED
 		if order['status'] == 'FILLED':
 			return True
 		
 		return False
 	
-	def wait_order(self, symbol, id_):
-		order = self._client.get_order(symbol, origClientOrderId=id_)
+	def wait_order(self, symbol, market, id_):
+		order = self._client.get_order(self.to_market_code(symbol, market), origClientOrderId=id_)
 		
 		start_time_s = time.time()
 		term_s = 1
@@ -193,47 +192,78 @@ class Binance(BaseExchange):
 			elif order['status'] == 'CANCELLED':
 				return False
 			
-			order = self._client.get_order(symbol, origClientOrderId=id_)
+			order = self._client.get_order(symbol, market, origClientOrderId=id_)
 			start_time_s = time.time()
 		
 		return False
 	
-	def cancel_order(self, symbol, id_):
-		self._client.cancel_order(symbol, origClientOrderId=id_)
-
-	def price_filter(self, price):
-		min_price = 0.00000100
-		max_price = 100000.00000000
-		tick_size = 0.00000100
+	def cancel_order(self, symbol, market, id_):
+		self._client.cancel_order(self.to_market_code(symbol, market), origClientOrderId=id_)
 		
-		price = max(min_price, price)
-		price = min(price, max_price)
-		price = int(price / tick_size) * tick_size
-		# price = '{:.6f}'.format(price)
+	def fetch_filters(self, symbol, market):
+		exchange_info = self._client.exchange_info(self.to_market_code(symbol, market))
+		filters = exchange_info['symbols'][0]['filters']
+		
+		casted_filters = {}
+		for filter_ in filters:
+			if filter_['filterType'] == 'PRICE_FILTER':
+				min_price = float(filter_['minPrice'])
+				max_price = float(filter_['maxPrice'])
+				tick_size = float(filter_['tickSize'])
+				casted_filters['price_filter'] = (min_price, max_price, tick_size)
+			elif filter_['filterType'] == 'LOT_SIZE':
+				min_qty = float(filter_['minQty'])
+				max_qty = float(filter_['maxQty'])
+				step_size = float(filter_['stepSize'])
+				casted_filters['lot_size'] = (min_qty, max_qty, step_size)
+			elif filter_['filterType'] == 'MARKET_LOT_SIZE':
+				min_qty = float(filter_['minQty'])
+				max_qty = float(filter_['maxQty'])
+				step_size = float(filter_['stepSize'])
+				casted_filters['market_lot_size'] = (min_qty, max_qty, step_size)
+		
+		return casted_filters
+
+	def price_filter(self, symbol, market, price):
+		filters = self.fetch_filters(symbol, market)
+		
+		if 'price_filter' in filters.keys():
+			min_price = filters['price_filter'][0]
+			max_price = filters['price_filter'][1]
+			tick_size = filters['price_filter'][2]
+			
+			price = max(min_price, price)
+			price = min(price, max_price)
+			if tick_size > 0.0:
+				price = int(price / tick_size) * tick_size
 		
 		return price
 	
-	def quantity_filter(self, quantity, is_market=False):
-		# MARKET_LOT_SIZE
-		if is_market:
-			minQty = 0.00100000
-			maxQty = 100000.00000000
-			step_size = 0.00100000
+	def quantity_filter(self, symbol, market, quantity, is_market=False):
+		filters = self.fetch_filters(symbol, market)
 		
-			quantity = max(minQty, quantity)
-			quantity = min(quantity, maxQty)
-			quantity = int(quantity / step_size) * step_size
-			# quantity = '{:.3f}'.format(quantity)
 		# LOT_SIZE
-		else:
-			minQty = 0.00100000
-			maxQty = 100000.00000000
-			step_size = 0.00100000
+		if 'lot_size' in filters.keys():
+			min_qty = filters['lot_size'][0]
+			max_qty = filters['lot_size'][1]
+			step_size = filters['lot_size'][2]
 			
-			quantity = max(minQty, quantity)
-			quantity = min(quantity, maxQty)
-			quantity = int(quantity / step_size) * step_size
-			# quantity = '{:.3f}'.format(quantity)
+			quantity = max(min_qty, quantity)
+			quantity = min(quantity, max_qty)
+			if step_size > 0.0:
+				quantity = int(quantity / step_size) * step_size
+
+		# MARKET_LOT_SIZE
+		# market order should be use both LOT_SIZE, MARKET_LOT_SIZE filter
+		if is_market and 'market_lot_size' in filters.keys():
+			min_qty = filters['market_lot_size'][0]
+			max_qty = filters['market_lot_size'][1]
+			step_size = filters['market_lot_size'][2]
+			
+			quantity = max(min_qty, quantity)
+			quantity = min(quantity, max_qty)
+			if step_size > 0.0:
+				quantity = int(quantity / step_size) * step_size
 		
 		return quantity
 

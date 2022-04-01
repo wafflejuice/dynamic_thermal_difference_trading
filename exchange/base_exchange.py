@@ -73,19 +73,27 @@ class BaseExchange:
 		pass
 	
 	@abc.abstractmethod
-	def order_executed_volume(self, symbol, id_):
+	def order_executed_volume(self, symbol, market, id_):
 		pass
 	
 	@abc.abstractmethod
-	def is_order_fully_executed(self, symbol, id_):
+	def is_order_fully_executed(self, symbol, market, id_):
 		pass
 	
 	@abc.abstractmethod
-	def wait_order(self, symbol, id_):
+	def wait_order(self, symbol, market, id_):
 		pass
 	
 	@abc.abstractmethod
-	def cancel_order(self, symbol, id_):
+	def cancel_order(self, symbol, market, id_):
+		pass
+
+	@abc.abstractmethod
+	def price_filter(self, symbol, market, price):
+		pass
+	
+	@abc.abstractmethod
+	def quantity_filter(self, symbol, market, quantity, is_market):
 		pass
 
 class ExchangeHelper:

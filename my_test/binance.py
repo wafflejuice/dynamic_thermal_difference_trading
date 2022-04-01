@@ -7,7 +7,7 @@ def market_sell(symbol, market, volume):
 	binance_api_key = config['binance']['key']['api key']
 	binance_secret_key = config['binance']['key']['secret key']
 	binance = Binance(binance_api_key, binance_secret_key)
-	
+
 	print(binance.create_market_sell_order(symbol, market, volume))
 
 def deposit_txid_case(txid):

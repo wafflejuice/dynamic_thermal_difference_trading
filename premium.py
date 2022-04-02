@@ -1,8 +1,7 @@
 from exchange.binance import Binance, Futures
-from exchange.upbit import Upbit
 import currency
 
-class Kimp:
+class Premium:
 	
 	'''
 	|	stage	|	0	|	1	|	2	|	3	|	4	|	5	|	6	|
@@ -13,59 +12,131 @@ class Kimp:
 	bound = [-0.06, -0.04, -0.02, 0.0, +0.02, +0.04, +0.06]
 	
 	@staticmethod
-	def calculate_premium(coin_symbol, from_ex, to_ex, from_currency='krw', to_currency='krw'):
-		usd_krw_price = currency.fetch_usd_krw_price()
+	def fetch_premium(symbol, from_market, from_ex, to_market, to_ex, from_to_rate):
+		from_price = from_ex.fetch_coin_price(symbol, from_market)
+		to_price = to_ex.fetch_coin_price(symbol, to_market)
 		
-		from_ex_price_krw = from_ex.fetch_coin_price(from_ex, coin_symbol)
-		to_ex_price_krw = to_ex.fetch_coin_price(to_ex, coin_symbol) * currency.fetch_usd_krw_price()
-		
-		if from_currency == 'krw':
-			pass
-		elif from_currency == 'usd':
-			from_ex_price_krw *= usd_krw_price
-		
-		if to_currency == 'krw':
-			pass
-		elif to_currency == 'usd':
-			to_ex_price_krw *= usd_krw_price
-		
-		return (to_ex_price_krw - from_ex_price_krw) / from_ex_price_krw
+		from_price *= from_to_rate
 	
-	@classmethod
-	def calculate_premiums(cls, coin_symbols, from_ex, to_ex, from_currency='krw', to_currency='krw'):
-		usd_krw_price = currency.fetch_usd_krw_price()
+		return (to_price - from_price) / from_price
+	
+	@staticmethod
+	def calculate_premium(symbol, from_prices, to_prices, from_to_rate):
+		if symbol in from_prices.keys() and symbol in to_prices.keys():
+			from_price = from_prices[symbol]
+			to_price = to_prices[symbol]
 		
-		from_ex_coin_ids = []
-		to_ex_coin_ids = []
+			from_price *= from_to_rate
 		
-		for coin_symbol in coin_symbols:
-			from_ex_coin_ids.append(Upbit.get_coin_id(coin_symbol))
-			to_ex_coin_ids.append(Binance.get_coin_id(coin_symbol))
+			return (to_price - from_price) / from_price
 		
-		from_ex_tickers = from_ex.fetch_tickers()
-		to_ex_tickers = to_ex.fetch_tickers()
+		return None
 		
-		coin_premiums = {}
+	@staticmethod
+	def fetch_premiums(from_market, from_ex, to_market, to_ex):
+		from_prices = from_ex.fetch_prices(from_market)
+		to_prices = to_ex.fetch_prices(to_market)
 		
-		for i in range(len(from_ex_coin_ids)):
-			if from_ex_coin_ids[i] in from_ex_tickers.keys() and to_ex_coin_ids[i] in to_ex_tickers.keys():
-				from_ex_price_krw = from_ex_tickers[from_ex_coin_ids[i]]['last']
-				to_ex_price_krw = to_ex_tickers[to_ex_coin_ids[i]]['last']
-				
-				if from_currency == 'krw':
-					pass
-				elif from_currency == 'usd':
-					from_ex_price_krw *= usd_krw_price
-				
-				if to_currency == 'krw':
-					pass
-				elif to_currency == 'usd':
-					to_ex_price_krw *= usd_krw_price
-				
-				coin_premiums[coin_symbols[i]] = (to_ex_price_krw - from_ex_price_krw) / from_ex_price_krw
-				
-		return {k: v for k, v in sorted(coin_premiums.items(), key=lambda item: item[1])}
+		intersection_symbols = list(filter(lambda x: x in to_prices.keys(), from_prices.keys()))
 
+		usd_krw_rate = currency.fetch_usd_krw_rate()
+		from_to_rate = usd_krw_rate if from_market=='USDT' and to_market=='KRW' else 1 / usd_krw_rate
+		
+		premiums = {}
+		for s in intersection_symbols:
+			premiums[s] = Premium.calculate_premium(s, from_prices, to_prices, from_to_rate)
+			
+		return premiums
+	
+	@staticmethod
+	def calculate_expected_profit(lot_size, from_price, to_price, withdraw_fee, from_to_rate):
+		from_price *= from_to_rate
+		withdraw_fee *= from_price
+		
+		return lot_size * (to_price - from_price) - withdraw_fee
+	
+	@staticmethod
+	def fetch_expected_profits(lot_size, from_market, from_ex, from_addresses, to_market, to_ex, to_addresses):
+		from_prices = from_ex.fetch_prices(from_market)
+		to_prices = to_ex.fetch_prices(to_market)
+		
+		# print('from')
+		# print(from_prices)
+		# print('to')
+		# print(to_prices)
+		
+		withdraw_fees = from_ex.fetch_withdraw_fees()
+		
+		intersection_symbols = list(filter(lambda x: x in to_prices.keys(), from_prices.keys()))
+		# print('intersection')
+		# print(intersection_symbols)
+		
+		intersection_networks = dict()
+		for s in intersection_symbols:
+			if s in from_addresses.keys() and s in to_addresses.keys():
+				intersection_networks[s] = []
+				for n in from_addresses[s].keys():
+					if n in to_addresses[s].keys():
+						intersection_networks[s].append(n)
+				if not intersection_networks[s]:
+					del(intersection_networks[s])
+		# {'BTC':['BTC'], ...}
+
+		usd_krw_rate = currency.fetch_usd_krw_rate()
+		from_to_rate = usd_krw_rate if from_market=='USDT' and to_market=='KRW' else 1 / usd_krw_rate
+		
+		max_symbol = None
+		max_network = None
+		expected_profits = dict()
+		for symbol in intersection_networks.keys():
+			max_expected_profit_per_chain = 0
+			for network in intersection_networks[symbol]:
+				expected_profit_per_chain = Premium.calculate_expected_profit(lot_size, from_prices[symbol], to_prices[symbol], withdraw_fees[symbol][network], from_to_rate)
+				if expected_profit_per_chain > max_expected_profit_per_chain:
+					max_symbol = symbol
+					max_network = network
+			
+		return expected_profits
+	
+	@staticmethod
+	def fetch_max_expected_profit(lot_size, from_market, from_ex, from_addresses, to_market, to_ex, to_addresses):
+		from_prices = from_ex.fetch_prices(from_market)
+		to_prices = to_ex.fetch_prices(to_market)
+		
+		withdraw_fees = from_ex.fetch_withdraw_fees(from_addresses)
+		
+		intersection_networks = dict()
+		for s in from_addresses.keys():
+			if s in from_addresses.keys() and s in to_addresses.keys():
+				intersection_networks[s] = []
+				for n in from_addresses[s].keys():
+					if n in to_addresses[s].keys():
+						intersection_networks[s].append(n)
+				if not intersection_networks[s]:
+					del (intersection_networks[s])
+		# {'BTC':['BTC'], ...}
+		# print(withdraw_fees)
+		# print(intersection_networks)
+		
+		usd_krw_rate = currency.fetch_usd_krw_rate()
+		from_to_rate = usd_krw_rate if from_market == 'USDT' and to_market == 'KRW' else 1 / usd_krw_rate
+		
+		max_expected_profit = 0
+		max_symbol = None
+		max_network = None
+		for symbol in intersection_networks.keys():
+			for network in intersection_networks[symbol]:
+				# print(f'symbol={symbol}, network={network}')
+				expected_profit_per_chain = Premium.calculate_expected_profit(lot_size, from_prices[symbol], to_prices[symbol],
+																			  withdraw_fees[symbol][network],
+																			  from_to_rate)
+				if expected_profit_per_chain > max_expected_profit:
+					max_expected_profit = expected_profit_per_chain
+					max_symbol = symbol
+					max_network = network
+		
+		return max_symbol, max_network, max_expected_profit
+	
 	@staticmethod
 	def calculate_transfer_balance_ratio(previous_stage, current_stage):
 		if previous_stage < current_stage:

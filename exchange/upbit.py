@@ -11,16 +11,23 @@ import time
 class Upbit(BaseExchange):
 	KRW_SYMBOL = 'KRW'
 	
-	def __init__(self, api_key, secret_key):
+	def __init__(self, api_key, secret_key, addresses):
 		self._api_key = api_key
 		self._secret_key = secret_key
+		
+		self._withdraw_fees = self._fetch_withdraw_fees(addresses)
+		# self._withdraw_fees = {'XRP': {'XRP': 1.0}, 'CVC': {'ETH': 93.0}, 'WAVES': {'WAVES': 0.001}, 'ARDR': {'ARDR': 2.0}, 'REP': {'ETH': 3.4}, 'NEO': {'NEO3': 0.1}, 'MFT': {'ETH': 3408.0}, 'IOST': {'IOST': 0.0}, 'STPT': {'ETH': 299.0}, 'MBL': {'ONT': 600.0}, 'STMX': {'ETH': 1689.0}, 'PLA': {'ETH': 27.0}, 'CELO': {'CELO': 2.0}, 'STX': {'STX': 10.0}}
+		# print(self._withdraw_fees)
 	
 	def to_market_code(self, symbol, market):
 		return '{}-{}'.format(market, symbol)
 	
 	# ex. 'KRW-ETH' to 'ETH'
-	def to_symbol(self, market_code):
+	def to_symbol(self, market_code, market=None):
 		return market_code.split('-')[1]
+	
+	def to_market(self, market_code, symbol=None):
+		return market_code.split('-')[0]
 	
 	def _get_ticker(self, market_code):
 		url = "https://api.upbit.com/v1/ticker"
@@ -34,21 +41,41 @@ class Upbit(BaseExchange):
 		timestamp_ms = int(ticker[0]['timestamp'])
 		
 		return timestamp_ms
-
+	
+	def _get_market_all(self):
+		url = "https://api.upbit.com/v1/market/all?isDetails=false"
+		headers = {"Accept": "application/json"}
+		res = requests.request("GET", url, headers=headers)
+		
+		return res.json()
+	
+	def fetch_market_codes(self):
+		market_all = self._get_market_all()
+		market_codes = list(map(lambda x: x['market'], market_all))
+		
+		return market_codes
+		
 	def fetch_symbols(self):
-		url = "https://api.upbit.com/v1/market/all"
-		querystring = {"isDetails": "false"}
+		market_codes = self._get_market_all()
+		symbols = list(map(lambda x: self.to_symbol(x['market']), market_codes))
 		
-		res = requests.request("GET", url, params=querystring)
-		res = res.json()
-		markets = list(map(lambda x: self.to_symbol(x['market']), res))
-		
-		return markets
+		return symbols
 	
 	def fetch_price(self, symbol, market):
 		ticker = self._get_ticker(self.to_market_code(symbol, market))
 		
 		return float(ticker[0]['trade_price'])
+		
+	def fetch_prices(self, market):
+		market_codes = self.fetch_market_codes()
+		market_codes = list(filter(lambda x: self.to_market(x)==market, market_codes))
+		tickers = self._get_ticker(', '.join(market_codes))
+		
+		prices = {}
+		for ticker in tickers:
+			prices[self.to_symbol(ticker['market'], market)] = ticker['trade_price']
+		
+		return prices
 	
 	def _fetch_balance(self):
 		url = "https://api.upbit.com/v1/accounts"
@@ -121,6 +148,20 @@ class Upbit(BaseExchange):
 		res = self._get_withdraws_chance(symbol)
 		
 		return float(res['currency']['withdraw_fee'])
+
+	def _fetch_withdraw_fees(self, addresses):
+		symbols = self.fetch_symbols()
+		withdraw_fees = dict()
+		for symbol in symbols:
+			if symbol in addresses.keys():
+				withdraw_fees[symbol] = {list(addresses[symbol].keys())[0]: self.fetch_withdraw_fee(symbol)}
+			# else:
+			# 	withdraw_fees[symbol] = {symbol:self.fetch_withdraw_fee(symbol)}
+		
+		return withdraw_fees
+		
+	def fetch_withdraw_fees(self, addresses):
+		return self._withdraw_fees
 	
 	def _fetch_withdraw_info(self, symbol):
 		url = "https://api.upbit.com/v1/withdraws/chance"
@@ -226,7 +267,7 @@ class Upbit(BaseExchange):
 	
 	def wait_withdraw(self, id_):
 		withdraw_response = self._get_withdraw(id_, None, None)
-		print(withdraw_response)
+		
 		start_time_s = time.time()
 		term_s = 1
 		while True:
@@ -299,7 +340,7 @@ class Upbit(BaseExchange):
 	
 	def wait_deposit(self, txid):
 		deposit_response = self._get_deposit(None, txid, None)
-		print(deposit_response)
+		
 		start_time_s = time.time()
 		term_s = 1
 		while True:
@@ -315,6 +356,11 @@ class Upbit(BaseExchange):
 			start_time_s = time.time()
 		
 		return False
+	
+	def fetch_deposit_amount(self, txid):
+		deposit_response = self._get_deposit(None, txid, None)
+		
+		return float(deposit_response['amount'])
 	
 	def _post_orders(self, symbol, market, side, volume, price, ord_type):
 		url = 'https://api.upbit.com/v1/orders'
@@ -354,7 +400,7 @@ class Upbit(BaseExchange):
 
 	def create_market_buy_order(self, symbol, market, price):
 		res = self._post_orders(symbol, market, 'bid', None, price, 'price')
-		
+		print(res)
 		return res['uuid']
 	
 	def create_market_sell_order(self, symbol, market, volume):

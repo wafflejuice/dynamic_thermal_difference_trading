@@ -17,7 +17,11 @@ class BaseExchange:
 		pass
 	
 	@abc.abstractmethod
-	def to_symbol(self, market_code):
+	def to_symbol(self, market_code, market):
+		pass
+
+	@abc.abstractmethod
+	def to_market(self, market_code, symbol):
 		pass
 
 	@abc.abstractmethod
@@ -29,7 +33,16 @@ class BaseExchange:
 		pass
 
 	@abc.abstractmethod
+	def fetch_market_codes(self):
+		pass
+	
+	@abc.abstractmethod
 	def fetch_price(self, symbol, market):
+		pass
+
+	# {symbol : price, ...}
+	@abc.abstractmethod
+	def fetch_prices(self, market):
 		pass
 		
 	@abc.abstractmethod
@@ -47,6 +60,11 @@ class BaseExchange:
 	@abc.abstractmethod
 	def fetch_withdraw_fee(self, symbol, network):
 		pass
+
+	# {symbol:{network1:fee1, network2:fee2, ... }, ... }
+	@abc.abstractmethod
+	def fetch_withdraw_fees(self, addresses):
+		pass
 	
 	@abc.abstractmethod
 	def withdraw(self, symbol, to_addr, to_tag, amount, network):
@@ -62,6 +80,10 @@ class BaseExchange:
 	
 	@abc.abstractmethod
 	def wait_deposit(self, txid):
+		pass
+	
+	@abc.abstractmethod
+	def fetch_deposit_amount(self, txid):
 		pass
 	
 	@abc.abstractmethod

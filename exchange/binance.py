@@ -16,26 +16,40 @@ class Binance(BaseExchange):
 	def to_market_code(self, symbol, market):
 		return symbol+market
 	
-	def to_symbol(self, market_code):
+	def to_symbol(self, market_code, market):
+		return market_code[:-len(market)]
+	
+	def to_market(self, market_code, symbol):
 		pass
 	
 	def fetch_server_timestamp(self):
 		return int(self._client.time()['serverTime'])
 	
 	def fetch_symbols(self):
-		# return self._client.ticker_price()
+		pass
+	
+	def fetch_market_codes(self):
 		pass
 	
 	def fetch_price(self, symbol, market):
 		market_code = self.to_market_code(symbol, market)
 		return float(self._client.ticker_price(market_code)['price'])
 	
+	def fetch_prices(self, market):
+		tickers = self._client.ticker_price()
+		
+		prices = {}
+		for ticker in tickers:
+			prices[self.to_symbol(ticker['symbol'], market)] = float(ticker['price'])
+		
+		return prices
+	
 	def fetch_balance(self, symbol):
 		all_coins_info = self._client.coin_info()
 		
 		for coin_info in all_coins_info:
 			if coin_info['coin'] == symbol:
-				return coin_info['free']
+				return float(coin_info['free'])
 		
 		return None
 	
@@ -80,6 +94,17 @@ class Binance(BaseExchange):
 			print('Such symbol does not exist')
 			return False
 		return False
+	
+	def fetch_withdraw_fees(self, addresses=None):
+		all_coins_info = self._client.coin_info()
+		
+		withdraw_fees = dict()
+		for coin_info in all_coins_info:
+			withdraw_fees[coin_info['coin']] = dict()
+			for network in coin_info['networkList']:
+				withdraw_fees[coin_info['coin']][network['network']] = float(network['withdrawFee'])
+		
+		return withdraw_fees
 	
 	def withdraw(self, symbol, to_addr, to_tag, amount, network=None):
 		return self._client.withdraw(symbol, amount, to_addr, addressTag=to_tag, network=network)
@@ -148,6 +173,15 @@ class Binance(BaseExchange):
 			
 			deposit_history = self._client.deposit_history()
 			start_time_s = time.time()
+		
+		return None
+
+	def fetch_deposit_amount(self, txid):
+		deposit_history = self._client.deposit_history()
+		
+		for deposit in deposit_history:
+			if deposit['txId'].lower() == txid.lower():
+				return float(deposit['amount'])
 		
 		return None
 		

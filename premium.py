@@ -2,15 +2,6 @@ from exchange.binance import Binance, Futures
 import currency
 
 class Premium:
-	
-	'''
-	|	stage	|	0	|	1	|	2	|	3	|	4	|	5	|	6	|
-	+-------------------+-------+-------+-------+-------+-------+-------+
-	|	bound	|	-6%	|	-4%	|	-2%	|	0%	|	2%	|	4%	|	6%	|
-	'''
-	
-	bound = [-0.06, -0.04, -0.02, 0.0, +0.02, +0.04, +0.06]
-	
 	@staticmethod
 	def fetch_premium(symbol, from_market, from_ex, to_market, to_ex, from_to_rate):
 		from_price = from_ex.fetch_coin_price(symbol, from_market)
@@ -126,84 +117,3 @@ class Premium:
 					max_network = network
 		
 		return max_symbol, max_network, max_expected_profit
-	
-	@staticmethod
-	def calculate_transfer_balance_ratio(previous_stage, current_stage):
-		if previous_stage < current_stage:
-			return (current_stage - previous_stage) / (6 - previous_stage)
-		elif previous_stage == current_stage:
-			return 0.0
-		else:
-			return (current_stage - previous_stage) / previous_stage
-	
-	@classmethod
-	def calculate_stage(cls, previous_stage, current_kimp):
-		if cls.bound[previous_stage] < current_kimp:
-			if previous_stage == len(cls.bound) - 1:
-				return previous_stage
-			
-			while True:
-				if cls.bound[previous_stage] <= current_kimp:
-					previous_stage += 1
-				else:
-					return previous_stage - 1
-				
-		elif cls.bound[previous_stage] == current_kimp:
-			return previous_stage
-		
-		else:
-			if previous_stage == 0:
-				return previous_stage
-			
-			while True:
-				if cls.bound[previous_stage] >= current_kimp:
-					previous_stage -= 1
-				else:
-					return previous_stage + 1
-	
-	@classmethod
-	def is_above(cls, kimp):
-		if kimp < cls.bound[0]:
-			return -1
-		
-		if cls.bound[len(cls.bound) - 1] < kimp:
-			return len(cls.bound) - 1
-		
-		previous_stage = 0
-		
-		while True:
-			if cls.bound[previous_stage] < kimp:
-				previous_stage += 1
-			else:
-				return previous_stage - 1
-			
-	@classmethod
-	def is_under(cls, kimp):
-		if cls.bound[len(cls.bound) - 1] < kimp:
-			return -1
-		
-		if kimp < cls.bound[0]:
-			return 0
-		
-		previous_stage = len(cls.bound) - 1
-		
-		while True:
-			if kimp < cls.bound[previous_stage]:
-				previous_stage -= 1
-			else:
-				return previous_stage + 1
-
-
-class Futp:
-	@staticmethod
-	def calculate_futp(binance, futures, coin_symbol):
-		binance_coin_price = Binance.fetch_coin_price(binance, coin_symbol)
-		futures_coin_price = Futures.fetch_coin_price(futures, coin_symbol)
-		
-		return (futures_coin_price - binance_coin_price) / binance_coin_price
-	
-	@classmethod
-	def is_acceptable(cls, binance, futures, coin_symbol, gap_ratio):
-		futp = cls.calculate_futp(binance, futures, coin_symbol)
-		
-		return abs(futp) < gap_ratio

@@ -55,16 +55,13 @@ class Binance(BaseExchange):
 	
 	def is_wallet_withdrawable(self, symbol, network):
 		all_coins_info = self._client.coin_info()
-		
+		print(all_coins_info)
 		for coin_info in all_coins_info:
 			if coin_info['coin'] == symbol:
+				print(coin_info)
 				for network_info in coin_info['networkList']:
 					if network_info['network'] == network:
 						return network_info['withdrawEnable']
-					print('Such network is not supported for the symbol')
-					return False
-			print('Such symbol does not exist')
-			return False
 		return False
 	
 	def is_wallet_depositable(self, symbol, network):
@@ -75,10 +72,6 @@ class Binance(BaseExchange):
 				for network_info in coin_info['networkList']:
 					if network_info['network'] == network:
 						return network_info['depositEnable']
-					print('Such network is not supported for the symbol')
-					return False
-			print('Such symbol does not exist')
-			return False
 		return False
 	
 	def fetch_withdraw_fee(self, symbol, network):
@@ -89,10 +82,6 @@ class Binance(BaseExchange):
 				for network_info in coin_info['networkList']:
 					if network_info['network'] == network:
 						return network_info['withdrawFee']
-					print('Such network is not supported for the symbol')
-					return False
-			print('Such symbol does not exist')
-			return False
 		return False
 	
 	def fetch_withdraw_fees(self, addresses=None):

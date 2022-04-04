@@ -189,6 +189,7 @@ def logic(market1, ex1, addresses1, tags1, market2, ex2, addresses2, tags2):
 			else:
 				is_1_to_2 = True
 		
+		to_tag = None
 		if is_1_to_2:
 			candidate_symbol, candidate_network, expected_profit = max_expected_profit_1_to_2
 			from_lot_size = lot_size1
@@ -198,7 +199,8 @@ def logic(market1, ex1, addresses1, tags1, market2, ex2, addresses2, tags2):
 			to_market = market2
 			to_ex = ex2
 			to_addr = addresses2[candidate_symbol][candidate_network]
-			to_tag = tags2[candidate_symbol][candidate_network]
+			if candidate_symbol in tags2[candidate_symbol].keys() and candidate_network in tags2[candidate_symbol].keys():
+				to_tag = tags2[candidate_symbol][candidate_network]
 			to_balance = balance2
 		else:
 			candidate_symbol, candidate_network, expected_profit = max_expected_profit_2_to_1
@@ -209,7 +211,8 @@ def logic(market1, ex1, addresses1, tags1, market2, ex2, addresses2, tags2):
 			to_market = market1
 			to_ex = ex1
 			to_addr = addresses1[candidate_symbol][candidate_network]
-			to_tag = tags1[candidate_symbol][candidate_network]
+			if candidate_symbol in tags1[candidate_symbol].keys() and candidate_network in tags1[candidate_symbol].keys():
+				to_tag = tags1[candidate_symbol][candidate_network]
 			to_balance = balance1
 		
 		print(f'candidate_symbol={candidate_symbol}, candidate_network={candidate_network}, expected_profit={expected_profit}')
@@ -248,17 +251,20 @@ def run():
 	
 	config = Config.load_config()
 	
-	upbit_api_key = config['upbit']['key']['api key']
-	upbit_secret_key = config['upbit']['key']['secret key']
-	upbit_addresses = config['upbit']['address']
-	upbit_tags = config['upbit']['tag']
-	upbit = Upbit(upbit_api_key, upbit_secret_key, upbit_addresses)
+	# upbit_api_key = config['upbit']['key']['api key']
+	# upbit_secret_key = config['upbit']['key']['secret key']
+	# upbit_addresses = config['upbit']['address']
+	# upbit_tags = config['upbit']['tag']
+	# upbit = Upbit(upbit_api_key, upbit_secret_key, upbit_addresses)
 	
 	binance_api_key = config['binance']['key']['api key']
 	binance_secret_key = config['binance']['key']['secret key']
-	binance = Binance(binance_api_key, binance_secret_key)
 	binance_addresses = config['binance']['address']
 	binance_tags = config['binance']['tag']
+	binance = Binance(binance_api_key, binance_secret_key)
+	
+	print(binance.is_wallet_withdrawable('STX', 'STX'))
+	return
 	
 	res = logic('KRW', upbit, upbit_addresses, upbit_tags, 'USDT', binance, binance_addresses, binance_tags)
 	print(res)

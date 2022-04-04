@@ -16,8 +16,8 @@ class Upbit(BaseExchange):
 		self._secret_key = secret_key
 		
 		self._withdraw_fees = self._fetch_withdraw_fees(addresses)
-		# self._withdraw_fees = {'XRP': {'XRP': 1.0}, 'CVC': {'ETH': 93.0}, 'WAVES': {'WAVES': 0.001}, 'ARDR': {'ARDR': 2.0}, 'REP': {'ETH': 3.4}, 'NEO': {'NEO3': 0.1}, 'MFT': {'ETH': 3408.0}, 'IOST': {'IOST': 0.0}, 'STPT': {'ETH': 299.0}, 'MBL': {'ONT': 600.0}, 'STMX': {'ETH': 1689.0}, 'PLA': {'ETH': 27.0}, 'CELO': {'CELO': 2.0}, 'STX': {'STX': 10.0}}
 		# print(self._withdraw_fees)
+		# self._withdraw_fees = {'XRP': {'XRP': 1.0}, 'CVC': {'ETH': 93.0}, 'WAVES': {'WAVES': 0.001}, 'ARDR': {'ARDR': 2.0}, 'REP': {'ETH': 3.4}, 'NEO': {'NEO3': 0.1}, 'MFT': {'ETH': 3408.0}, 'IOST': {'IOST': 0.0}, 'STPT': {'ETH': 299.0}, 'MBL': {'ONT': 600.0}, 'STMX': {'ETH': 1689.0}, 'PLA': {'ETH': 27.0}, 'CELO': {'CELO': 2.0}, 'STX': {'STX': 10.0}}
 	
 	def to_market_code(self, symbol, market):
 		return '{}-{}'.format(market, symbol)
